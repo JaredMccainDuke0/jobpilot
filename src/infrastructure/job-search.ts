@@ -8,7 +8,7 @@ import { MATCH_RESULT_LIMIT, MATCH_RESULT_TARGET } from "../domain/match-visibil
 
 const MAX_SEARCH_CALLS = 5;
 const MAX_CANDIDATES_PER_CALL = 12;
-const MODEL_REQUEST_TIMEOUT_MS = 180_000;
+const MODEL_REQUEST_TIMEOUT_MS = 95_000;
 const MODEL_RETRY_DELAYS_MS = [500, 1_500] as const;
 const MAX_SOURCE_BYTES = 512 * 1024;
 
@@ -439,23 +439,21 @@ export async function searchJobs(query: SearchQuery) {
   const unique = new Map<string, LiveJob>();
   const failures: string[] = [];
   let successfulQueries = 0;
-  for (const focus of plans) {
-    const result = await runQuery(baseUrl, model, key, {
-      ...query,
-      excludeFingerprints: [...(query.excludeFingerprints || []), ...unique.keys()],
-    }, excluded, focus);
+  // Run all role-family searches concurrently. The model provider sits behind Cloudflare, which
+  // aborts any single request at ~100s (HTTP 524); serial passes would multiply that latency and
+  // reliably time out. Parallel passes keep total wall-clock near the slowest single search.
+  const baseFingerprints = [...(query.excludeFingerprints || [])];
+  const results = await Promise.all(plans.map((focus) => runQuery(baseUrl, model, key, {
+    ...query,
+    excludeFingerprints: baseFingerprints,
+  }, excluded, focus)));
+  for (const result of results) {
     if (!result.ok) {
       failures.push(result.error);
-      // requestModelResponse already retried transport and 5xx failures. Further role-family
-      // queries would hit the same unavailable service and only make the user wait longer.
-      if (/^模型服务连接失败|^模型搜索返回 [45]\d\d$/.test(result.error)) break;
       continue;
     }
     successfulQueries += 1;
     for (const { key: dedupe, job } of result.jobs) if (!unique.has(dedupe)) unique.set(dedupe, job);
-    // Once the minimum target is reached, stop the extra passes; a single pass may still return
-    // more than five, up to the bounded ten-result limit.
-    if (unique.size >= MATCH_RESULT_TARGET) break;
   }
 
   if (!successfulQueries) {
