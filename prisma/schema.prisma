@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Resume {
+  id               String               @id @default(cuid())
+  fileName         String
+  fileType         String
+  filePath         String
+  confirmed        Boolean              @default(false)
+  currentVersionId String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  versions         ResumeParseVersion[]
+}
+
+model ResumeParseVersion {
+  id          String   @id @default(cuid())
+  resumeId    String
+  parsedJson  String
+  missingJson String
+  source      String
+  createdAt   DateTime @default(now())
+  resume      Resume   @relation(fields: [resumeId], references: [id])
+}
+
+model JobPreference {
+  id        String   @id @default(cuid())
+  rawText   String
+  city      String?
+  jobType   String?
+  industry  String?
+  workMode  String?
+  confirmed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model JobSource {
+  id         String  @id @default(cuid())
+  name       String
+  url        String
+  sourceType String
+  verified   Boolean @default(false)
+  jobs       Job[]
+}
+
+model Job {
+  id              String        @id @default(cuid())
+  title           String
+  company         String
+  city            String
+  education       String?
+  graduationYear  Int?
+  workMode        String?
+  industry        String?
+  description     String
+  applicationType String
+  applicationUrl  String
+  sourceId        String
+  source          JobSource     @relation(fields: [sourceId], references: [id])
+  matches         MatchResult[]
+}
+
+model MatchRun {
+  id              String        @id @default(cuid())
+  resumeVersionId String
+  preferenceId    String
+  createdAt       DateTime      @default(now())
+  results         MatchResult[]
+}
+
+model MatchResult {
+  id           String   @id @default(cuid())
+  runId        String
+  jobId        String
+  score        Int
+  eligible     Boolean
+  reasonsJson  String
+  mismatchJson String
+  unknownJson  String
+  risksJson    String
+  selected     Boolean  @default(false)
+  run          MatchRun @relation(fields: [runId], references: [id])
+  job          Job      @relation(fields: [jobId], references: [id])
+
+  @@unique([runId, jobId])
+}
+
+model ApplicationTask {
+  id              String                     @id @default(cuid())
+  jobId           String
+  resumeVersionId String
+  idempotencyKey  String                     @unique
+  status          String
+  adapter         String
+  errorCode       String?
+  errorSummary    String?
+  attempts        Int                        @default(0)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  history         ApplicationStatusHistory[]
+}
+
+model ApplicationStatusHistory {
+  id        String          @id @default(cuid())
+  taskId    String
+  status    String
+  reason    String?
+  createdAt DateTime        @default(now())
+  task      ApplicationTask @relation(fields: [taskId], references: [id])
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

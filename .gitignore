@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.next-build/
+out/
+data/*.db
+data/uploads/
+data/logs/
+.local-logs/
+.env
+.env.local
+playwright-report/
+test-results/
+.playwright-cli/
+output/
+*.tsbuildinfo
+prisma/data/
