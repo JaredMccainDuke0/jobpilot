@@ -8,8 +8,21 @@ const env = { ...process.env };
 afterEach(() => { vi.restoreAllMocks(); process.env = { ...env }; });
 const validJob = { title: "通信算法工程师", company: "测试科技有限公司", city: "深圳", education: "本科", graduationYear: null, workMode: "现场", industry: "通信", description: "负责无线通信算法研发、系统验证以及工程实现工作。", applicationEmail: "jobs@official.test", applicationUrl: "https://official.test/careers/123", sourceName: "测试科技招聘", sourceUrl: "https://official.test/careers/123" };
 function responseFor(jobs: unknown[], citations: string[]) { return new Response(JSON.stringify({ output: [{ type: "web_search_call", status: "completed" }, { type: "message", content: [{ type: "output_text", text: JSON.stringify(jobs), annotations: citations.map((url) => ({ url })) }] }] }), { status: 200 }); }
-// Fresh Response per call so the fan-out (multiple web_search queries) can each read a body.
-function mockFetch(jobs: unknown[], citations: string[]) { return vi.spyOn(globalThis, "fetch").mockImplementation(async () => responseFor(jobs, citations)); }
+function sourceResponse(job: any) {
+  return new Response(`<main>${job.company} ${job.title} 招聘邮箱 ${job.applicationEmail || ""}</main>`, { status: 200, headers: { "content-type": "text/html" } });
+}
+// Fresh model and source responses keep tests hermetic while exercising mandatory page evidence.
+function mockFetch(jobs: any[], citations: string[]) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any) => {
+    const url = String(input);
+    if (url.endsWith("/responses")) return responseFor(jobs, citations);
+    const job = jobs.find((item) => item.sourceUrl === url);
+    return job ? sourceResponse(job) : new Response(null, { status: 404 });
+  });
+}
+function modelCalls(fetchMock: any) {
+  return fetchMock.mock.calls.filter((call: any[]) => String(call[0]).endsWith("/responses"));
+}
 function configure() {
   process.env.JOBPILOT_MODEL_BASE_URL = "https://model.test/v1";
   process.env.JOBPILOT_MODEL_NAME = "gpt-5.6-sol";
@@ -24,9 +37,8 @@ describe("Responses web search job adapter", () => {
     const fetchMock = mockFetch(jobs, jobs.map((job) => job.sourceUrl));
     const result = await searchJobs({ text: "通信和 AI", city: "深圳", candidate: { skills: ["Python"] }, excludeUrls: ["https://seen.test/job"] });
     expect(result.mode).toBe("live"); expect(result.jobs).toHaveLength(10);
-    // Concurrent fan-out: all role-family searches fire at once, so more than one request is expected.
-    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1);
-    for (const call of fetchMock.mock.calls) {
+    expect(modelCalls(fetchMock)).toHaveLength(2);
+    for (const call of modelCalls(fetchMock)) {
       const request = JSON.parse(String(call[1]?.body));
       expect(request.tools).toEqual([{ type: "web_search" }]);
       expect(request.input).toContain("https://seen.test/job");
@@ -42,17 +54,21 @@ describe("Responses web search job adapter", () => {
       [{ ...validJob, title: "最后一个岗位", applicationEmail: "last@official.test", sourceUrl: "https://official.test/last", applicationUrl: "https://official.test/last" }],
     ];
     let call = 0;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
-      const jobs = batches[Math.min(call, batches.length - 1)];
-      call += 1;
+    const allJobs = batches.flat();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any) => {
+      const url = String(input);
+      if (!url.endsWith("/responses")) {
+        const job = allJobs.find((item) => item.sourceUrl === url);
+        return job ? sourceResponse(job) : new Response(null, { status: 404 });
+      }
+      const jobs = batches[Math.min(call++, batches.length - 1)];
       return responseFor(jobs, jobs.map((job) => job.sourceUrl));
     });
 
     const result = await searchJobs({ text: "通信和 AI", city: "深圳", candidate: { skills: ["Python"] } });
 
-    // Concurrent fan-out fires every planned search; dedupe across batches still yields 5 distinct jobs.
     expect(result.jobs).toHaveLength(5);
-    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(modelCalls(fetchMock)).toHaveLength(4);
   });
 
   it("does not include resume contact details in the model prompt", async () => {
@@ -85,7 +101,7 @@ describe("Responses web search job adapter", () => {
     const example = { ...validJob, sourceUrl: "https://example.com/job", applicationUrl: "https://example.com/job" };
     mockFetch([validJob, wrongCity, example], [validJob.sourceUrl, wrongCity.sourceUrl, example.sourceUrl]);
     const result = await searchJobs({ text: "通信", city: "深圳", candidate: {}, excludeUrls: [validJob.sourceUrl] });
-    expect(result.jobs).toEqual([]); expect(result.warning).toContain("未用虚拟职位补足");
+    expect(result.jobs).toEqual([]); expect(result.warning).toContain("未用无邮箱岗位或虚拟职位补足");
   });
 
   it("returns no fallback jobs when web search is not executed", async () => {
@@ -104,7 +120,12 @@ describe("Responses web search job adapter", () => {
       applicationUrl: `https://official.test/retry/${index}`,
     }));
     let calls = 0;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any) => {
+      const url = String(input);
+      if (!url.endsWith("/responses")) {
+        const job = jobs.find((item) => item.sourceUrl === url);
+        return job ? sourceResponse(job) : new Response(null, { status: 404 });
+      }
       calls += 1;
       if (calls === 1) throw new TypeError("fetch failed");
       return responseFor(jobs, jobs.map((job) => job.sourceUrl));
@@ -112,10 +133,9 @@ describe("Responses web search job adapter", () => {
 
     const result = await searchJobs({ text: "通信和 AI", city: "深圳", candidate: { skills: ["Python"] } });
 
-    // Each concurrent search retries its own transient failure once, then recovers the 5 jobs.
     expect(result.mode).toBe("live");
     expect(result.jobs).toHaveLength(5);
-    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(modelCalls(fetchMock)).toHaveLength(3);
   });
 
   it("accepts a job when the citation is a sibling page on the same official host", async () => {
@@ -175,16 +195,22 @@ describe("Responses web search job adapter", () => {
       { type: "web_search_call", status: "completed", action: { type: "open_page", url: "https://firstparty.cn/careers/ai" } },
       { type: "message", content: [{ type: "output_text", text: JSON.stringify([opened, viaSite, uncited]), annotations: [] }] },
     ] };
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(body), { status: 200 }));
+    const actionJobs = [opened, viaSite, uncited];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any) => {
+      const url = String(input);
+      if (url.endsWith("/responses")) return new Response(JSON.stringify(body), { status: 200 });
+      const job = actionJobs.find((item) => item.sourceUrl === url);
+      return job ? sourceResponse(job) : new Response(null, { status: 404 });
+    });
     const result = await searchJobs({ text: "大模型", city: "深圳", candidate: { skills: ["Python"] } });
     expect(result.mode).toBe("live");
-    // opened (open_page host) and viaSite (site: operator host) are accepted; the uncited host is rejected.
-    expect(result.jobs.map((job) => job.title).sort()).toEqual(["AI 平台工程师", "机器学习工程师"]);
+    // Exact-page evidence is authoritative even when this relay omits or reshapes citations.
+    expect(new Set(result.jobs.map((job) => job.title))).toEqual(new Set(["AI 平台工程师", "机器学习工程师", "未被引用岗位"]));
     expect(result.jobs.every((job) => job.applicationType === "verified_email")).toBe(true);
     expect(result.jobs.every((job) => job.applicationEmail !== null)).toBe(true);
   });
 
-  it("accepts an uncited but reachable page (with an email) when JOBPILOT_VERIFY_URLS=1", async () => {
+  it("accepts an uncited page only when its public email is verified on that page", async () => {
     configure();
     process.env.JOBPILOT_VERIFY_URLS = "1";
     // Both jobs land on hosts the model never cited (empty annotations, no matching action). Verification
@@ -212,7 +238,7 @@ describe("Responses web search job adapter", () => {
     expect(result.jobs.every((job) => job.applicationType === "verified_email")).toBe(true);
   });
 
-  it("accepts an uncited reachable vacancy without an email as a manual application", async () => {
+  it("excludes a reachable vacancy without a public email", async () => {
     configure();
     process.env.JOBPILOT_VERIFY_URLS = "1";
     const manual = {
@@ -238,13 +264,10 @@ describe("Responses web search job adapter", () => {
 
     const result = await searchJobs({ text: "AI 应用", city: "深圳", candidate: { skills: ["Python"] } });
 
-    expect(result.jobs).toHaveLength(1);
-    expect(result.jobs[0].applicationType).toBe("official_apply");
-    expect(result.jobs[0].applicationEmail).toBeNull();
-    expect(result.jobs[0].source.verified).toBe(true);
+    expect(result.jobs).toEqual([]);
   });
 
-  it("does not verify or accept uncited jobs when the flag is unset (default)", async () => {
+  it("always verifies email evidence even when the legacy verification flag is unset", async () => {
     configure();
     const uncited = { ...validJob, title: "未验证岗位", applicationEmail: "hr@uncited.cn", sourceUrl: "https://uncited-firstparty.cn/careers/9", applicationUrl: "https://uncited-firstparty.cn/careers/9" };
     const body = { output: [
@@ -255,26 +278,61 @@ describe("Responses web search job adapter", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any) => {
       const url = String(input);
       if (url.endsWith("/responses")) return new Response(JSON.stringify(body), { status: 200 });
-      verifyCalls += 1; return new Response(null, { status: 200 });
+      verifyCalls += 1;
+      return new Response(`<main>${uncited.company} ${uncited.title} 招聘邮箱 ${uncited.applicationEmail}</main>`, {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
     });
     const result = await searchJobs({ text: "大模型", city: "深圳", candidate: { skills: ["Python"] } });
-    expect(result.jobs).toEqual([]);
-    expect(verifyCalls).toBe(0); // no network verification happens unless JOBPILOT_VERIFY_URLS=1
+    expect(result.jobs).toHaveLength(1);
+    expect(verifyCalls).toBeGreaterThan(0);
   });
 
-  it("keeps a real vacancy without an email as an official manual application", async () => {
+  it("rejects a model-provided email that is absent from the public vacancy page", async () => {
+    configure();
+    const claimed = { ...validJob, applicationEmail: "claimed@official.test" };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any) => {
+      const url = String(input);
+      if (url.endsWith("/responses")) return responseFor([claimed], [claimed.sourceUrl]);
+      return new Response(`<main>${claimed.company} ${claimed.title} 请通过官网申请</main>`, {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+    });
+
+    const result = await searchJobs({ text: "通信", city: "深圳", candidate: {} });
+
+    expect(result.jobs).toEqual([]);
+  });
+
+  it("rejects a generic page contact email without recruitment context", async () => {
+    configure();
+    const generic = { ...validJob, applicationEmail: "service@official.test" };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any) => {
+      const url = String(input);
+      if (url.endsWith("/responses")) return responseFor([generic], [generic.sourceUrl]);
+      return new Response(`<main>${generic.company} ${generic.title}</main><footer>联系我们 ${generic.applicationEmail}</footer>`, {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+    });
+
+    const result = await searchJobs({ text: "通信", city: "深圳", candidate: {} });
+
+    expect(result.jobs).toEqual([]);
+  });
+
+  it("keeps only the verified-email vacancy when a batch also contains a manual-only vacancy", async () => {
     configure();
     const withEmail = { ...validJob, title: "AI 工程师A", sourceUrl: "https://official.test/careers/a", applicationUrl: "https://official.test/careers/a", applicationEmail: "hr@official.test" };
     const noEmail = { ...validJob, title: "AI 工程师B", sourceUrl: "https://official.test/careers/b", applicationUrl: "https://official.test/careers/b/apply", applicationEmail: null };
     mockFetch([withEmail, noEmail], ["https://official.test/careers/a", "https://official.test/careers/b"]);
     const result = await searchJobs({ text: "大模型", city: "深圳", candidate: { skills: ["Python"] } });
-    expect(result.jobs).toHaveLength(2);
-    expect(result.jobs.map((job) => job.title).sort()).toEqual(["AI 工程师A", "AI 工程师B"]);
+    expect(result.jobs).toHaveLength(1);
+    expect(result.jobs.map((job) => job.title)).toEqual(["AI 工程师A"]);
     const withEmailResult = result.jobs.find((job) => job.title === "AI 工程师A");
-    const manualResult = result.jobs.find((job) => job.title === "AI 工程师B");
     expect(withEmailResult?.applicationType).toBe("verified_email");
     expect(withEmailResult?.applicationEmail).toBe("hr@official.test");
-    expect(manualResult?.applicationType).toBe("official_apply");
-    expect(manualResult?.applicationEmail).toBeNull();
   });
 });
