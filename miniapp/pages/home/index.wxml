@@ -5,7 +5,7 @@
     <view class="hero"><text class="eyebrow">JOBPILOT / HOME</text><text class="title">{{state.user.email}}</text><text class="muted">从简历到岗位，再到投递，所有进度集中在这里。</text></view>
     <view class="grid">
       <view class="card action" bindtap="openMatches"><text class="card-title">匹配岗位</text><text class="muted">搜索已核验公开招聘邮箱的真实岗位</text><text class="arrow">→</text></view>
-      <view class="card"><text class="card-title">当前简历</text><text class="muted">{{state.resume ? (state.resume.confirmed ? "已确认，可开始匹配" : "等待确认") : "尚未上传"}}</text></view>
+      <view class="card action" bindtap="openResume"><text class="card-title">当前简历</text><text class="muted">{{state.resume ? (state.resume.confirmed ? "已确认，可开始匹配" : "等待确认") : "尚未上传"}}</text><text class="arrow">→</text></view>
       <view class="card"><text class="card-title">投递记录</text><text class="muted">{{state.tasks.length}} 条任务</text></view>
     </view>
   </block>
