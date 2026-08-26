@@ -14,4 +14,5 @@ Page({
     const item = results.find((result) => result.id === id);
     request("/api/matches/select", { method: "POST", data: { id, selected: !item.selected, visibleIds: results.map((result) => result.id) } }).then(() => this.load()).catch((error) => this.setData({ error: error.message }));
   },
+  detail(event) { wx.navigateTo({ url: `/pages/matches/detail?id=${encodeURIComponent(event.currentTarget.dataset.id)}` }); },
 });

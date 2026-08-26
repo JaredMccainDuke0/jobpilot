@@ -1,0 +1,2 @@
+const { request } = require("../../utils/api");
+Page({ data: { loading: true, error: "", job: null }, onLoad(options) { this.id = options.id; this.load(); }, load() { request("/api/state").then((state) => { const result = (state.run && state.run.results || []).find((item) => item.id === this.id); this.setData({ job: result && result.job, loading: false, error: result ? "" : "岗位不存在或已刷新" }); }).catch((error) => this.setData({ error: error.message, loading: false })); } });
