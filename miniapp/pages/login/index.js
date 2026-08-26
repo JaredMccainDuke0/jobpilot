@@ -2,6 +2,7 @@ const { request } = require("../../utils/api");
 
 Page({
   data: { email: "", busy: false, error: "" },
+  onEmailInput(event) { this.setData({ email: event.detail.value }); },
   onLoad() { this.exchangeCode(); },
   exchangeCode() {
     wx.login({ success: ({ code }) => request("/api/miniapp/session", { method: "POST", data: { code } }).then((data) => {
