@@ -20,6 +20,11 @@ export async function clearSession(){(await cookies()).delete(COOKIE)}
 export async function currentUser(){const value=(await cookies()).get(COOKIE)?.value;if(!value||!secret())return null;const [userId,signature]=value.split(".");if(!userId||!signature)return null;const expected=sign(userId);if(signature.length!==expected.length||!timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))return null;return one<any>("SELECT id,email,role FROM users WHERE id=?",userId)||null}
 export async function requireUser(){const user=await currentUser();if(!user)throw new Error("UNAUTHENTICATED");return user}
 
+// Bearer session for non-browser clients (for example a future mini-program). Web Cookie
+// sessions remain unchanged; this token carries only an opaque user id and an HMAC signature.
+export function createBearerSession(userId:string){return `${userId}.${sign(userId)}`}
+export function verifyBearerSession(value:string){const [userId,signature]=value.split(".");if(!userId||!signature||!secret())return null;const expected=sign(userId);if(signature.length!==expected.length||!timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))return null;return one<any>("SELECT id,email,role FROM users WHERE id=?",userId)||null}
+
 function encryptionKey(){return createHash("sha256").update(secret()).digest()}
 export function encryptUserSecret(userId:string,key:string,value:string){const iv=randomBytes(12),cipher=createCipheriv("aes-256-gcm",encryptionKey(),iv);cipher.setAAD(Buffer.from(`${userId}:${key}`));const ciphertext=Buffer.concat([cipher.update(value,"utf8"),cipher.final()]),tag=cipher.getAuthTag();run("INSERT INTO user_secrets VALUES(?,?,?,?,?,?) ON CONFLICT(userId,key) DO UPDATE SET ciphertext=excluded.ciphertext,iv=excluded.iv,tag=excluded.tag,updatedAt=excluded.updatedAt",userId,key,ciphertext.toString("base64"),iv.toString("base64"),tag.toString("base64"),now())}
 export function decryptUserSecret(userId:string,key:string){const row=one<any>("SELECT * FROM user_secrets WHERE userId=? AND key=?",userId,key);if(!row)return null;const decipher=createDecipheriv("aes-256-gcm",encryptionKey(),Buffer.from(row.iv,"base64"));decipher.setAAD(Buffer.from(`${userId}:${key}`));decipher.setAuthTag(Buffer.from(row.tag,"base64"));return Buffer.concat([decipher.update(Buffer.from(row.ciphertext,"base64")),decipher.final()]).toString("utf8")}

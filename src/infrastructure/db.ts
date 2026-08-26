@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS application_history(id TEXT PRIMARY KEY,taskId TEXT,s
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT,updatedAt TEXT);`);
 db.exec(`CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,passwordHash TEXT NOT NULL,passwordSalt TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user',createdAt TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS user_settings(userId TEXT NOT NULL,key TEXT NOT NULL,value TEXT NOT NULL,updatedAt TEXT NOT NULL,PRIMARY KEY(userId,key));
-CREATE TABLE IF NOT EXISTS user_secrets(userId TEXT NOT NULL,key TEXT NOT NULL,ciphertext TEXT NOT NULL,iv TEXT NOT NULL,tag TEXT NOT NULL,updatedAt TEXT NOT NULL,PRIMARY KEY(userId,key));`);
+CREATE TABLE IF NOT EXISTS user_secrets(userId TEXT NOT NULL,key TEXT NOT NULL,ciphertext TEXT NOT NULL,iv TEXT NOT NULL,tag TEXT NOT NULL,updatedAt TEXT NOT NULL,PRIMARY KEY(userId,key));
+CREATE TABLE IF NOT EXISTS miniapp_accounts(openid TEXT PRIMARY KEY,unionid TEXT UNIQUE,emailUserId TEXT UNIQUE,userId TEXT NOT NULL,createdAt TEXT NOT NULL,updatedAt TEXT NOT NULL);`);
 const jobColumns = db.prepare("PRAGMA table_info(jobs)").all() as Array<{name:string}>;
 if (!jobColumns.some((column) => column.name === "applicationEmail")) db.exec("ALTER TABLE jobs ADD COLUMN applicationEmail TEXT");
 function ensureColumn(table:string,column:string,definition:string){const columns=db.prepare(`PRAGMA table_info(${table})`).all() as Array<{name:string}>;if(!columns.some(item=>item.name===column))db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)}
