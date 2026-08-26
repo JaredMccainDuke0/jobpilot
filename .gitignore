@@ -4,6 +4,7 @@ node_modules/
 out/
 data/*.db
 data/local/
+data/backups/
 data/uploads/
 data/logs/
 .local-logs/

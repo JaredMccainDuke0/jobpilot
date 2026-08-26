@@ -127,7 +127,7 @@ export default function JobPilot() {
   const load = async (showSpinner = false) => {
     try {
       if (showSpinner) setLoading(true);
-      setState(await request("/api/state"));
+      setState(await request("/api/state?matchLimit=30"));
       setError("");
     } catch (e: any) {
       setError(e.message);

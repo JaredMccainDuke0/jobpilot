@@ -31,7 +31,7 @@ beforeEach(() => {
 
 describe("state for archived match runs", () => {
   it("keeps the run metadata but returns no old match results", async () => {
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/state"));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -44,7 +44,7 @@ describe("state for archived match runs", () => {
     ).toBe(false);
   });
 
-  it("loads up to thirty active results for client-side filtering and pagination", async () => {
+  it("keeps the shared default response at one page for mini-program compatibility", async () => {
     mocks.one.mockImplementation((sql: string) => {
       if (sql.includes("FROM match_runs")) return { id: "run-active", consumedAt: null };
       return undefined;
@@ -55,7 +55,28 @@ describe("state for archived match runs", () => {
       return [];
     });
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/state"));
+
+    expect(response.status).toBe(200);
+    expect(mocks.all).toHaveBeenCalledWith(
+      expect.stringContaining("ORDER BY r.score DESC LIMIT ?"),
+      "run-active",
+      10,
+    );
+  });
+
+  it("allows the web client to opt into thirty results for local pagination", async () => {
+    mocks.one.mockImplementation((sql: string) => {
+      if (sql.includes("FROM match_runs")) return { id: "run-active", consumedAt: null };
+      return undefined;
+    });
+    mocks.all.mockImplementation((sql: string) => {
+      if (sql.includes("FROM match_results r JOIN jobs")) return [];
+      if (sql.includes("FROM application_tasks t")) return [];
+      return [];
+    });
+
+    const response = await GET(new Request("http://localhost/api/state?matchLimit=30"));
 
     expect(response.status).toBe(200);
     expect(mocks.all).toHaveBeenCalledWith(
