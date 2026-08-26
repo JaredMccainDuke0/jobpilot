@@ -1,5 +1,5 @@
 import { submissionEligibility } from "@/domain/application";
-import { MATCH_RESULT_LIMIT } from "@/domain/match-visibility";
+import { MATCH_SELECTION_LIMIT } from "@/domain/match-visibility";
 import { requireUser } from "@/infrastructure/auth";
 import { all, id, now, one, run, transaction } from "@/infrastructure/db";
 
@@ -36,7 +36,7 @@ export async function POST() {
      ORDER BY r.score DESC`,
     latest.id,
     latest.id,
-    MATCH_RESULT_LIMIT,
+    MATCH_SELECTION_LIMIT,
   );
   if (!results.length)
     return Response.json({ error: "没有可确认的已选职位" }, { status: 400 });

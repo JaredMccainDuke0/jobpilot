@@ -43,4 +43,25 @@ describe("state for archived match runs", () => {
       mocks.all.mock.calls.some(([sql]) => String(sql).includes("FROM match_results r JOIN jobs")),
     ).toBe(false);
   });
+
+  it("loads up to thirty active results for client-side filtering and pagination", async () => {
+    mocks.one.mockImplementation((sql: string) => {
+      if (sql.includes("FROM match_runs")) return { id: "run-active", consumedAt: null };
+      return undefined;
+    });
+    mocks.all.mockImplementation((sql: string) => {
+      if (sql.includes("FROM match_results r JOIN jobs")) return [];
+      if (sql.includes("FROM application_tasks t")) return [];
+      return [];
+    });
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    expect(mocks.all).toHaveBeenCalledWith(
+      expect.stringContaining("ORDER BY r.score DESC LIMIT ?"),
+      "run-active",
+      30,
+    );
+  });
 });

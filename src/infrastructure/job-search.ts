@@ -4,7 +4,7 @@ import { isIP } from "node:net";
 import { z } from "zod";
 import { getSecret } from "./secrets";
 import { sameCity } from "../domain/matching";
-import { MATCH_RESULT_LIMIT, MATCH_RESULT_TARGET } from "../domain/match-visibility";
+import { MATCH_RESULT_STORAGE_LIMIT, MATCH_RESULT_TARGET } from "../domain/match-visibility";
 
 const MAX_SEARCH_CALLS = 5;
 const SEARCH_CONCURRENCY = 2;
@@ -419,7 +419,7 @@ export async function searchJobs(query: SearchQuery) {
     return { jobs: [] as LiveJob[], mode: "unavailable" as const, fetchedAt, warning: error || "实时职位搜索暂不可用；未使用演示职位替代。" };
   }
 
-  const jobs = [...unique.values()].slice(0, MATCH_RESULT_LIMIT);
+  const jobs = [...unique.values()].slice(0, MATCH_RESULT_STORAGE_LIMIT);
   const warning = jobs.length < MATCH_RESULT_TARGET
     ? `本次找到 ${jobs.length} 个符合地点与方向、且公开招聘邮箱已在来源页面核验的真实岗位，尚未达到至少 ${MATCH_RESULT_TARGET} 个的目标；未用无邮箱岗位或虚拟职位补足。点“刷新/重新计算”可再搜一批新的。`
     : undefined;

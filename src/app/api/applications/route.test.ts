@@ -46,7 +46,7 @@ describe("application task creation scope", () => {
       expect.stringContaining("SELECT id FROM match_results WHERE runId=? ORDER BY score DESC LIMIT ?"),
       "run-1",
       "run-1",
-      10,
+      30,
     );
   });
 

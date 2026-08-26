@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("matched-job selection scope", () => {
-  it("select-all clears the run and selects only the visible ids explicitly sent by the UI", async () => {
+  it("select-all updates only the current page without clearing other pages", async () => {
     const visibleIds = ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"];
     const response = await POST(
       new Request("http://localhost/api/matches/select", {
@@ -43,17 +43,45 @@ describe("matched-job selection scope", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.run).toHaveBeenNthCalledWith(
-      1,
-      "UPDATE match_results SET selected=0 WHERE runId=?",
-      "run-1",
-    );
-    expect(mocks.run).toHaveBeenNthCalledWith(
-      2,
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    expect(mocks.run).toHaveBeenCalledWith(
       expect.stringContaining("id IN (?,?,?,?,?,?,?,?,?,?)"),
+      1,
       "run-1",
       ...visibleIds,
     );
+  });
+
+  it("updates one result without clearing selections outside the current page", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/matches/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "r2", selected: true, visibleIds: ["r1", "r2"] }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    expect(mocks.run).toHaveBeenCalledWith(
+      "UPDATE match_results SET selected=? WHERE id=? AND runId=?",
+      1,
+      "r2",
+      "run-1",
+    );
+  });
+
+  it("clears the entire run only through the explicit clear-all action", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/matches/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "r1", clearAll: true, visibleIds: ["r1"] }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.run).toHaveBeenCalledWith("UPDATE match_results SET selected=0 WHERE runId=?", "run-1");
   });
 
   it("rejects a scope larger than the rendered result limit", async () => {

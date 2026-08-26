@@ -3,6 +3,7 @@ node_modules/
 .next-build/
 out/
 data/*.db
+data/local/
 data/uploads/
 data/logs/
 .local-logs/

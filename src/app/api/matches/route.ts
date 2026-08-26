@@ -2,7 +2,7 @@ import { all, id, now, one, run, transaction } from "@/infrastructure/db";
 import { matchJob } from "@/domain/matching";
 import { requireUser } from "@/infrastructure/auth";
 import { searchJobs } from "@/infrastructure/job-search";
-import { MATCH_RESULT_LIMIT } from "@/domain/match-visibility";
+import { MATCH_RESULT_STORAGE_LIMIT } from "@/domain/match-visibility";
 
 export async function POST() {
   const user = await requireUser();
@@ -52,7 +52,7 @@ export async function POST() {
   const scored = live.jobs
     .map((job) => ({ job, match: matchJob(candidate, preference, job) }))
     .sort((a, b) => b.match.score - a.match.score || a.job.id.localeCompare(b.job.id))
-    .slice(0, MATCH_RESULT_LIMIT);
+    .slice(0, MATCH_RESULT_STORAGE_LIMIT);
   const runId = id();
   transaction(() => {
     run("INSERT INTO match_runs(id,resumeVersionId,preferenceId,createdAt,userId,searchWarning) VALUES(?,?,?,?,?,?)", runId, resume.currentVersionId, preference.id, now(), user.id, live.warning || null);
