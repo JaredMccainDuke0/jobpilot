@@ -1,0 +1,11 @@
+{
+  "pages": ["pages/login/index", "pages/home/index"],
+  "window": {
+    "navigationBarTitleText": "JobPilot",
+    "navigationBarBackgroundColor": "#f7f9fc",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#eef2f5"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}
