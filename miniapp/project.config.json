@@ -1,0 +1,15 @@
+{
+  "description": "JobPilot mini-program client",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "./",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": false,
+    "compileHotReLoad": true
+  },
+  "appid": "touristappid",
+  "projectname": "JobPilot"
+}
