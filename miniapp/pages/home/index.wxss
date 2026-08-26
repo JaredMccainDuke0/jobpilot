@@ -1,0 +1,1 @@
+page{background:#eef2f5;color:#111a24}.page{padding:100rpx 44rpx;display:flex;flex-direction:column;gap:24rpx}.title{font-size:64rpx;font-weight:700}.muted{font-size:28rpx;color:#687586;line-height:1.6}
