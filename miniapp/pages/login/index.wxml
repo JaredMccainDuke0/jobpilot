@@ -2,7 +2,7 @@
   <view class="hero"><text class="eyebrow">JOBPILOT</text><text class="title">连接你的求职账户</text><text class="muted">小程序与网页登录共用同一份简历、匹配和投递记录。</text></view>
   <view class="card">
     <text class="label">登录邮箱</text>
-    <input class="input" type="text" model:value="{{email}}" placeholder="name@example.com" />
+    <input class="input" type="text" value="{{email}}" bindinput="onEmailInput" placeholder="name@example.com" />
     <button class="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="bindAccount">绑定并继续</button>
     <text wx:if="{{error}}" class="error">{{error}}</text>
   </view>

@@ -1,5 +1,5 @@
 import {createCipheriv,createDecipheriv,createHash,createHmac,randomBytes,scryptSync,timingSafeEqual} from "node:crypto";
-import {cookies} from "next/headers";
+import {cookies,headers} from "next/headers";
 import {id,now,one,run} from "./db";
 
 const COOKIE="jobpilot_session";
@@ -17,7 +17,7 @@ export async function setSession(userId:string){(await cookies()).set(COOKIE,`${
 // Session cookie descriptor for callers that must set it explicitly on a redirect Response (e.g. OAuth callback).
 export function sessionCookie(userId:string){return {name:COOKIE,value:`${userId}.${sign(userId)}`,options:{httpOnly:true,sameSite:"lax" as const,secure:process.env.NODE_ENV==="production",maxAge:604800,path:"/"}}}
 export async function clearSession(){(await cookies()).delete(COOKIE)}
-export async function currentUser(){const value=(await cookies()).get(COOKIE)?.value;if(!value||!secret())return null;const [userId,signature]=value.split(".");if(!userId||!signature)return null;const expected=sign(userId);if(signature.length!==expected.length||!timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))return null;return one<any>("SELECT id,email,role FROM users WHERE id=?",userId)||null}
+export async function currentUser(){const cookieValue=(await cookies()).get(COOKIE)?.value;const bearer=(await headers()).get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];const value=cookieValue||bearer;if(!value||!secret())return null;const [userId,signature]=value.split(".");if(!userId||!signature)return null;const expected=sign(userId);if(signature.length!==expected.length||!timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))return null;return one<any>("SELECT id,email,role FROM users WHERE id=?",userId)||null}
 export async function requireUser(){const user=await currentUser();if(!user)throw new Error("UNAUTHENTICATED");return user}
 
 // Bearer session for non-browser clients (for example a future mini-program). Web Cookie
