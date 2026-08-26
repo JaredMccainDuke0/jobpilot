@@ -8,4 +8,6 @@ Page({
   },
   openMatches() { wx.navigateTo({ url: "/pages/matches/index" }); },
   openResume() { wx.navigateTo({ url: "/pages/resume/index" }); },
+  openPreferences() { wx.navigateTo({ url: "/pages/preferences/index" }); },
+  openApplications() { wx.navigateTo({ url: "/pages/applications/index" }); },
 });

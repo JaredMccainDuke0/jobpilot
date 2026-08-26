@@ -1,5 +1,5 @@
 {
-  "pages": ["pages/login/index", "pages/home/index", "pages/resume/index", "pages/matches/index"],
+  "pages": ["pages/login/index", "pages/home/index", "pages/resume/index", "pages/preferences/index", "pages/matches/index", "pages/applications/index"],
   "window": {
     "navigationBarTitleText": "JobPilot",
     "navigationBarBackgroundColor": "#f7f9fc",
