@@ -31,12 +31,12 @@ function configure() {
 }
 
 describe("Responses web search job adapter", () => {
-  it("returns up to ten cited jobs and stops after a full general search", async () => {
+  it("keeps cited jobs already returned by the bounded general search", async () => {
     configure();
     const jobs = Array.from({ length: 12 }, (_, index) => ({ ...validJob, title: `通信算法工程师 ${index}`, sourceUrl: `https://official.test/careers/${index}`, applicationUrl: `https://official.test/careers/${index}` }));
     const fetchMock = mockFetch(jobs, jobs.map((job) => job.sourceUrl));
     const result = await searchJobs({ text: "通信和 AI", city: "深圳", candidate: { skills: ["Python"] }, excludeUrls: ["https://seen.test/job"] });
-    expect(result.mode).toBe("live"); expect(result.jobs).toHaveLength(10);
+    expect(result.mode).toBe("live"); expect(result.jobs).toHaveLength(12);
     expect(modelCalls(fetchMock)).toHaveLength(2);
     for (const call of modelCalls(fetchMock)) {
       const request = JSON.parse(String(call[1]?.body));

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { EMPTY_MATCH_FILTERS, activeMatchFilterCount, buildMatchesHref, filterMatchResults, paginateMatchResults, parseMatchView, type MatchFilters } from "@/domain/match-filters";
 import {
   Home,
   Search,
@@ -121,11 +122,12 @@ export default function JobPilot() {
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [path, setPath] = useState("/"),
+    [routeSearch, setRouteSearch] = useState(""),
     [startMatchSearch, setStartMatchSearch] = useState(false);
   const load = async (showSpinner = false) => {
     try {
       if (showSpinner) setLoading(true);
-      setState(await request("/api/state"));
+      setState(await request("/api/state?matchLimit=30"));
       setError("");
     } catch (e: any) {
       setError(e.message);
@@ -136,14 +138,21 @@ export default function JobPilot() {
   const reload = () => load(false);
   useEffect(() => {
     setPath(location.pathname);
+    setRouteSearch(location.search);
     void load(true);
-    const onBack = () => setPath(location.pathname);
+    const onBack = () => {
+      setPath(location.pathname);
+      setRouteSearch(location.search);
+    };
     addEventListener("popstate", onBack);
     return () => removeEventListener("popstate", onBack);
   }, []);
-  const go = (p: string) => {
-    if (p !== location.pathname) history.pushState(null, "", p);
-    setPath(p);
+  const go = (href: string) => {
+    const target = new URL(href, location.origin);
+    if (`${target.pathname}${target.search}` !== `${location.pathname}${location.search}`)
+      history.pushState(null, "", `${target.pathname}${target.search}`);
+    setPath(target.pathname);
+    setRouteSearch(target.search);
     scrollTo({ top: 0, behavior: "instant" });
   };
   if (loading)
@@ -188,13 +197,22 @@ export default function JobPilot() {
         setState={setState}
         reload={reload}
         go={go}
+        routeSearch={routeSearch}
         autoStart={startMatchSearch}
         onAutoStartHandled={() => setStartMatchSearch(false)}
       />
     );
   else if (currentPath.startsWith("/matches/"))
     view = (
-      <MatchDetail state={state} id={currentPath.split("/").pop()!} go={go} />
+      <MatchDetail
+        state={state}
+        id={currentPath.split("/").pop()!}
+        go={go}
+        backHref={(() => {
+          const candidate = new URLSearchParams(routeSearch).get("back") || "";
+          return candidate.startsWith("/matches") ? candidate : "/matches";
+        })()}
+      />
     );
   else if (currentPath === "/applications/confirm")
     view = <ConfirmApplications state={state} go={go} reload={reload} />;
@@ -489,54 +507,48 @@ function InlineActionError({
     </div>
   );
 }
-function Matches({
-  state,
-  setState,
-  reload,
-  go,
-  autoStart,
-  onAutoStartHandled,
-}: {
-  state: State;
-  setState: any;
-  reload: any;
-  go: any;
-  autoStart: boolean;
-  onAutoStartHandled: () => void;
+function Matches({ state, setState, reload, go, routeSearch, autoStart, onAutoStartHandled }: {
+  state: State; setState: any; reload: any; go: any; routeSearch: string;
+  autoStart: boolean; onAutoStartHandled: () => void;
 }) {
-  const results = state.run?.results || [],
-    selected = results.filter((x: any) => x.selected).length,
-    allSelected = results.length > 0 && results.every((x: any) => x.selected);
+  const results = state.run?.results || [];
+  const view = parseMatchView(routeSearch);
+  const filteredResults = filterMatchResults(results, view.filters);
+  const pagination = paginateMatchResults(filteredResults, view.page);
+  const pageResults = pagination.items as any[];
+  const selected = results.filter((item: any) => item.selected).length;
+  const selectedOnPage = pageResults.filter((item: any) => item.selected).length;
+  const allSelectedOnPage = pageResults.length > 0 && pageResults.every((item: any) => item.selected);
+  const filterCount = activeMatchFilterCount(view.filters);
   const [busy, setBusy] = useState(autoStart);
   const autoStartRef = useRef(false);
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
   const [allPending, setAllPending] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(filterCount > 0);
+  const [draftFilters, setDraftFilters] = useState<MatchFilters>(view.filters);
+  const [confirmSearch, setConfirmSearch] = useState(false);
   const [searchMessage, setSearchMessage] = useState("");
   const [searchFailure, setSearchFailure] = useState("");
   const [selectionFailure, setSelectionFailure] = useState<
     | { kind: "one"; id: string; selected: boolean; message: string }
-    | { kind: "all"; selected: boolean; message: string }
+    | { kind: "all"; selected: boolean; clearAll?: boolean; message: string }
     | null
   >(null);
 
-  const patchOne = (resultId: string, next: boolean) =>
-    setState((current: any) => ({
-      ...current,
-      run: {
-        ...current.run,
-        results: (current.run?.results || []).map((item: any) =>
-          item.id === resultId ? { ...item, selected: next } : item,
-        ),
-      },
-    }));
-  const patchAll = (next: boolean) =>
-    setState((current: any) => ({
-      ...current,
-      run: {
-        ...current.run,
-        results: (current.run?.results || []).map((item: any) => ({ ...item, selected: next })),
-      },
-    }));
+  useEffect(() => {
+    setDraftFilters(view.filters);
+    if (activeMatchFilterCount(view.filters) > 0) setFiltersOpen(true);
+  }, [routeSearch]);
+
+  const patchOne = (resultId: string, next: boolean) => setState((current: any) => ({
+    ...current,
+    run: { ...current.run, results: (current.run?.results || []).map((item: any) => item.id === resultId ? { ...item, selected: next } : item) },
+  }));
+  const patchIds = (ids: string[], next: boolean) => setState((current: any) => ({
+    ...current,
+    run: { ...current.run, results: (current.run?.results || []).map((item: any) => ids.includes(item.id) ? { ...item, selected: next } : item) },
+  }));
+
   const selectOne = async (resultId: string, next: boolean) => {
     const previous = !!results.find((item: any) => item.id === resultId)?.selected;
     setSelectionFailure(null);
@@ -544,181 +556,123 @@ function Matches({
     patchOne(resultId, next);
     try {
       await request("/api/matches/select", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: resultId,
-          selected: next,
-          visibleIds: results.map((item: any) => item.id),
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: resultId, selected: next, visibleIds: pageResults.map((item: any) => item.id) }),
       });
     } catch (error) {
       patchOne(resultId, previous);
       setSelectionFailure({ kind: "one", id: resultId, selected: next, message: visibleError(error) });
     } finally {
-      setPendingIds((current) => {
-        const nextSet = new Set(current);
-        nextSet.delete(resultId);
-        return nextSet;
-      });
+      setPendingIds((current) => { const nextSet = new Set(current); nextSet.delete(resultId); return nextSet; });
     }
   };
-  const selectAll = async (next: boolean) => {
-    if (!results.length) return;
-    const previous = new Map(results.map((item: any) => [item.id, !!item.selected]));
-    setSelectionFailure(null);
-    setAllPending(true);
-    patchAll(next);
+
+  const selectPage = async (next: boolean) => {
+    if (!pageResults.length) return;
+    const ids = pageResults.map((item: any) => item.id);
+    const previous = new Map(pageResults.map((item: any) => [item.id, !!item.selected]));
+    setSelectionFailure(null); setAllPending(true); patchIds(ids, next);
     try {
       await request("/api/matches/select", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: results[0].id,
-          all: next,
-          visibleIds: results.map((item: any) => item.id),
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: pageResults[0].id, all: next, visibleIds: ids }),
       });
     } catch (error) {
       setState((current: any) => ({
         ...current,
-        run: {
-          ...current.run,
-          results: (current.run?.results || []).map((item: any) => ({
-            ...item,
-            selected: previous.get(item.id) ?? item.selected,
-          })),
-        },
+        run: { ...current.run, results: (current.run?.results || []).map((item: any) => previous.has(item.id) ? { ...item, selected: previous.get(item.id) } : item) },
       }));
       setSelectionFailure({ kind: "all", selected: next, message: visibleError(error) });
-    } finally {
-      setAllPending(false);
-    }
+    } finally { setAllPending(false); }
   };
+
+  const clearSelection = async () => {
+    if (!results.length || !selected) return;
+    const previous = new Map(results.map((item: any) => [item.id, !!item.selected]));
+    setSelectionFailure(null); setAllPending(true); patchIds(results.map((item: any) => item.id), false);
+    try {
+      await request("/api/matches/select", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: results[0].id, clearAll: true, visibleIds: pageResults.length ? pageResults.map((item: any) => item.id) : [results[0].id] }),
+      });
+    } catch (error) {
+      setState((current: any) => ({
+        ...current,
+        run: { ...current.run, results: (current.run?.results || []).map((item: any) => ({ ...item, selected: previous.get(item.id) ?? item.selected })) },
+      }));
+      setSelectionFailure({ kind: "all", selected: false, clearAll: true, message: visibleError(error) });
+    } finally { setAllPending(false); }
+  };
+
   const runSearch = async () => {
-    setBusy(true);
-    setSearchFailure("");
-    setSearchMessage("");
+    setBusy(true); setSearchFailure(""); setSearchMessage("");
     try {
       const matchResponse = await request("/api/matches", { method: "POST" });
-      await reload();
+      await reload(); go("/matches"); setConfirmSearch(false);
       if (matchResponse.warning) setSearchMessage(matchResponse.warning);
-    } catch (error) {
-      setSearchFailure(visibleError(error, "重新匹配失败"));
-    } finally {
-      setBusy(false);
-    }
+    } catch (error) { setSearchFailure(visibleError(error, "重新匹配失败")); }
+    finally { setBusy(false); }
   };
   useEffect(() => {
     if (!autoStart || autoStartRef.current) return;
-    autoStartRef.current = true;
-    onAutoStartHandled();
-    void runSearch();
+    autoStartRef.current = true; onAutoStartHandled(); void runSearch();
   }, [autoStart, onAutoStartHandled]);
+
   return (
     <section className={selected ? "with-action" : ""}>
       <div className="page-head">
-        <div>
-          <div className="eyebrow">按确定性条件优先排序</div>
-          <h1>匹配结果</h1>
-        </div>
-        <button
-          className="icon"
-          title="重新计算"
-          disabled={busy}
-          onClick={() => void runSearch()}
-        >
-          <RefreshCw className={busy ? "spin" : undefined} />
+        <div><div className="eyebrow">按确定性条件优先排序</div><h1>匹配结果</h1></div>
+        <button className="new-search" disabled={busy} onClick={() => setConfirmSearch(true)}>
+          <RefreshCw className={busy ? "spin" : undefined} /> {busy ? "正在搜索" : "搜索新岗位"}
         </button>
       </div>
-      <p className="muted">
-        分数综合硬性条件和可确认的能力证据；条件不符的职位仍可由你手动选择。
-      </p>
-      {busy && results.length > 0 && <p className="inline-notice" role="status">正在搜索匹配岗位，当前操作可能需要一些时间。</p>}
-      {!busy && !state.run?.consumedAt && state.run?.searchWarning && (
-        <p className="error">{state.run.searchWarning}</p>
-      )}
-      {searchMessage && <p className="inline-notice" role="status">{searchMessage}</p>}
-      {searchFailure && (
-        <InlineActionError
-          title="重新匹配失败"
-          message={searchFailure}
-          solution="请检查网络后重试；已有匹配结果不会被清除。"
-          onRetry={() => void runSearch()}
-          busy={busy}
-        />
-      )}
-      {selectionFailure && (
-        <InlineActionError
-          title="岗位选择未保存"
-          message={selectionFailure.message}
-          solution="页面已恢复到保存前状态，可以直接重试。"
-          onRetry={() =>
-            selectionFailure.kind === "one"
-              ? void selectOne(selectionFailure.id, selectionFailure.selected)
-              : void selectAll(selectionFailure.selected)
-          }
-          busy={allPending || pendingIds.size > 0}
-        />
-      )}
-      {busy && !results.length ? (
-        <div className="empty" role="status" aria-live="polite">
-          <RefreshCw className="spin" aria-hidden="true" />
-          <h2>正在搜索匹配岗位</h2>
-          <p>正在根据已保存的求职条件检索真实岗位，请稍候。</p>
+      <p className="muted">分数综合硬性条件和可确认的能力证据；筛选当前结果不会调用模型。</p>
+      {confirmSearch && (
+        <div className="search-confirm" role="alert">
+          <div><b>确认搜索新岗位？</b><p>这会调用模型并消耗 Token；筛选当前结果不需要重新搜索。</p></div>
+          <div><button type="button" onClick={() => setConfirmSearch(false)}>取消</button><button className="primary" type="button" onClick={() => void runSearch()}>确认并搜索</button></div>
         </div>
+      )}
+      {busy && results.length > 0 && <p className="inline-notice" role="status">正在搜索新岗位；当前结果仍然保留。</p>}
+      {!busy && !state.run?.consumedAt && state.run?.searchWarning && <p className="error">{state.run.searchWarning}</p>}
+      {searchMessage && <p className="inline-notice" role="status">{searchMessage}</p>}
+      {searchFailure && <InlineActionError title="重新匹配失败" message={searchFailure} solution="请检查网络后重试；已有匹配结果不会被清除。" onRetry={() => void runSearch()} busy={busy} />}
+      {selectionFailure && <InlineActionError title="岗位选择未保存" message={selectionFailure.message} solution="页面已恢复到保存前状态，可以直接重试。" onRetry={() => selectionFailure.kind === "one" ? void selectOne(selectionFailure.id, selectionFailure.selected) : selectionFailure.clearAll ? void clearSelection() : void selectPage(selectionFailure.selected)} busy={allPending || pendingIds.size > 0} />}
+
+      {busy && !results.length ? (
+        <div className="empty" role="status" aria-live="polite"><RefreshCw className="spin" aria-hidden="true" /><h2>正在搜索匹配岗位</h2><p>正在根据已保存的求职条件检索真实岗位，请稍候。</p></div>
       ) : !results.length ? (
-        <Empty
-          title={state.run?.consumedAt ? "本轮岗位已处理完成" : "暂无匹配结果"}
-          text={
-            state.run?.consumedAt
-              ? "已投递岗位仍保留在投递记录中。点击下方按钮，手动搜索下一批新岗位。"
-              : "当前条件下还没有可展示的岗位，可以调整需求后重新搜索。"
-          }
-          action={state.run?.consumedAt ? "刷新新岗位" : "调整需求"}
-          onClick={() =>
-            state.run?.consumedAt ? void runSearch() : go("/onboarding/preferences")
-          }
-        />
+        <Empty title={state.run?.consumedAt ? "本轮岗位已处理完成" : "暂无匹配结果"} text={state.run?.consumedAt ? "已投递岗位仍保留在投递记录中。点击下方按钮搜索下一批岗位。" : "请先填写求职需求并搜索岗位。"} action={state.run?.consumedAt ? "搜索新岗位" : "填写求职需求"} onClick={() => state.run?.consumedAt ? setConfirmSearch(true) : go("/onboarding/preferences")} />
       ) : (
         <>
           <div className="list-tools">
-            <button
-              disabled={allPending || pendingIds.size > 0}
-              onClick={() => void selectAll(!allSelected)}
-            >
-              <span className="loading-label">
-                {allPending && <RefreshCw className="spin" />}
-                {allPending ? "正在更新…" : allSelected ? "取消全选" : "全选当前结果"}
-              </span>
-            </button>
-            <button onClick={() => go("/onboarding/preferences")}>
-              <SlidersHorizontal /> 调整条件
-            </button>
+            <button disabled={allPending || pendingIds.size > 0 || !pageResults.length} onClick={() => void selectPage(!allSelectedOnPage)}><span className="loading-label">{allPending && <RefreshCw className="spin" />}{allPending ? "正在更新…" : allSelectedOnPage ? "取消本页全选" : "全选本页"}</span></button>
+            <button onClick={() => setFiltersOpen((current) => !current)}><SlidersHorizontal /> 筛选当前结果{filterCount ? ` (${filterCount})` : ""}</button>
+            {selected > 0 && <button disabled={allPending} onClick={() => void clearSelection()}>清空全部选择</button>}
           </div>
-          <div className="job-list">
-            {results.map((r: any) => (
-              <JobRow
-                key={r.id}
-                r={r}
-                pending={allPending || pendingIds.has(r.id)}
-                onSelect={selectOne}
-                go={go}
-              />
-            ))}
-          </div>
+          {filtersOpen && (
+            <form className="match-filters" onSubmit={(event) => { event.preventDefault(); go(buildMatchesHref(draftFilters, 1)); }}>
+              <label>关键词<input value={draftFilters.q} onChange={(event) => setDraftFilters({ ...draftFilters, q: event.target.value })} placeholder="岗位、公司或描述" /></label>
+              <label>城市<input value={draftFilters.city} onChange={(event) => setDraftFilters({ ...draftFilters, city: event.target.value })} placeholder="例如：深圳" /></label>
+              <label>工作方式<select value={draftFilters.workMode} onChange={(event) => setDraftFilters({ ...draftFilters, workMode: event.target.value })}><option value="">不限</option><option>现场</option><option>混合</option><option>远程</option></select></label>
+              <label>行业<input value={draftFilters.industry} onChange={(event) => setDraftFilters({ ...draftFilters, industry: event.target.value })} placeholder="例如：人工智能" /></label>
+              <label>匹配状态<select value={draftFilters.eligibility} onChange={(event) => setDraftFilters({ ...draftFilters, eligibility: event.target.value as MatchFilters["eligibility"] })}><option value="all">全部</option><option value="eligible">符合条件</option><option value="ineligible">条件不符</option></select></label>
+              <label>申请方式<select value={draftFilters.application} onChange={(event) => setDraftFilters({ ...draftFilters, application: event.target.value as MatchFilters["application"] })}><option value="all">全部</option><option value="automatic">可自动投递</option><option value="manual">手动申请</option></select></label>
+              <div className="match-filter-actions"><button type="button" onClick={() => { setDraftFilters(EMPTY_MATCH_FILTERS); go("/matches"); }}>清除筛选</button><button className="primary" type="submit">应用筛选</button></div>
+            </form>
+          )}
+          <div className="result-summary"><span>共 {filteredResults.length} 个结果{filterCount ? `（原始 ${results.length} 个）` : ""}</span><span>{filteredResults.length ? `显示 ${pagination.start + 1}–${pagination.end}` : "没有符合条件的岗位"}</span></div>
+          {!filteredResults.length ? (
+            <Empty title="没有符合筛选条件的岗位" text="这些筛选只作用于当前已搜索结果，不会调用模型。" action="清除筛选" onClick={() => go("/matches")} />
+          ) : (
+            <div className="job-list">{pageResults.map((result: any) => <JobRow key={result.id} r={result} pending={allPending || pendingIds.has(result.id)} onSelect={selectOne} go={go} backHref={buildMatchesHref(view.filters, pagination.page)} />)}</div>
+          )}
+          {filteredResults.length > 0 && pagination.totalPages > 1 && (
+            <nav className="pagination" aria-label="匹配结果分页"><button disabled={pagination.page === 1} onClick={() => go(buildMatchesHref(view.filters, pagination.page - 1))}>上一页</button><span>第 {pagination.page} / {pagination.totalPages} 页</span><button disabled={pagination.page === pagination.totalPages} onClick={() => go(buildMatchesHref(view.filters, pagination.page + 1))}>下一页</button></nav>
+          )}
         </>
       )}
-      {selected > 0 && (
-        <div className="bulk">
-          <span>
-            已选 <b>{selected}</b> 个职位
-          </span>
-          <button onClick={() => go("/applications/confirm")}>
-            检查并投递 <ChevronRight />
-          </button>
-        </div>
-      )}
+      {selected > 0 && <div className="bulk"><span>已选 <b>{selected}</b> 个职位{selected > selectedOnPage ? `（本页外 ${selected - selectedOnPage} 个）` : ""}</span><button onClick={() => go("/applications/confirm")}>检查并投递 <ChevronRight /></button></div>}
     </section>
   );
 }
@@ -727,11 +681,13 @@ function JobRow({
   pending,
   onSelect,
   go,
+  backHref,
 }: {
   r: any;
   pending: boolean;
   onSelect: (id: string, selected: boolean) => Promise<void>;
   go: any;
+  backHref: string;
 }) {
   const reasons = JSON.parse(r.reasonsJson);
   const mismatch = JSON.parse(r.mismatchJson);
@@ -751,7 +707,7 @@ function JobRow({
         <span />
         {pending && <RefreshCw className="selection-spinner spin" aria-label="正在保存选择" />}
       </label>
-      <button className="job-main" onClick={() => go(`/matches/${r.id}`)}>
+      <button className="job-main" onClick={() => go(`/matches/${r.id}?back=${encodeURIComponent(backHref)}`)}>
         <div className="job-top">
           <div>
             <h2>{r.job.title}</h2>
@@ -776,14 +732,14 @@ function JobRow({
     </article>
   );
 }
-function MatchDetail({ state, id, go }: { state: State; id: string; go: any }) {
+function MatchDetail({ state, id, go, backHref }: { state: State; id: string; go: any; backHref: string }) {
   const r = state.run?.results?.find((x: any) => x.id === id);
   if (!r)
     return (
       <Empty
         title="职位不存在"
         action="返回匹配"
-        onClick={() => go("/matches")}
+        onClick={() => go(backHref)}
       /> 
     );
   const sourceEvidence = r.job.sourceEvidence as
@@ -803,7 +759,7 @@ function MatchDetail({ state, id, go }: { state: State; id: string; go: any }) {
   ];
   return (
     <section>
-      <Back onClick={() => go("/matches")} />
+      <Back onClick={() => go(backHref)} />
       <div className="detail-head">
         <div>
           <h1>{r.job.title}</h1>

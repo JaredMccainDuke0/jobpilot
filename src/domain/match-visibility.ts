@@ -1,7 +1,9 @@
-// Five is the minimum target. Keep a bounded upper limit so one refresh cannot
-// create an unbounded result set or selection payload.
+// Five is the minimum search target. Store more than one page so results already
+// returned by the provider are not discarded, without starting extra model calls.
 export const MATCH_RESULT_TARGET = 5;
-export const MATCH_RESULT_LIMIT = 10;
+export const MATCH_RESULT_STORAGE_LIMIT = 30;
+export const MATCH_PAGE_SIZE = 10;
+export const MATCH_SELECTION_LIMIT = 30;
 
 export function normalizeVisibleResultIds(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -12,5 +14,5 @@ export function normalizeVisibleResultIds(value: unknown) {
         .map((item) => item.trim())
         .filter(Boolean),
     ),
-  ).slice(0, MATCH_RESULT_LIMIT);
+  ).slice(0, MATCH_PAGE_SIZE);
 }

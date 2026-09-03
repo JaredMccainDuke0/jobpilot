@@ -1,7 +1,7 @@
 import { all, one } from "@/infrastructure/db";
 import { requireUser } from "@/infrastructure/auth";
 import { getEmailSender } from "@/infrastructure/email-auth";
-import { MATCH_RESULT_LIMIT } from "@/domain/match-visibility";
+import { MATCH_PAGE_SIZE, MATCH_RESULT_STORAGE_LIMIT } from "@/domain/match-visibility";
 
 function parseStoredJson(value: unknown) {
   if (typeof value !== "string" || !value) return null;
@@ -23,9 +23,21 @@ function configuredModelProvider() {
   }
 }
 
-export async function GET() {
+function requestedMatchLimit(request: Request) {
+  try {
+    const value = new URL(request.url).searchParams.get("matchLimit");
+    return value === String(MATCH_RESULT_STORAGE_LIMIT)
+      ? MATCH_RESULT_STORAGE_LIMIT
+      : MATCH_PAGE_SIZE;
+  } catch {
+    return MATCH_PAGE_SIZE;
+  }
+}
+
+export async function GET(request: Request) {
   try {
     const user = await requireUser();
+    const matchLimit = requestedMatchLimit(request);
     const resume = one<any>(
       "SELECT * FROM resumes WHERE userId=? ORDER BY updatedAt DESC LIMIT 1",
       user.id,
@@ -49,9 +61,9 @@ export async function GET() {
       run.results = run.consumedAt
         ? []
         : all<any>(
-            `SELECT r.*,j.title,j.company,j.city,j.workMode,j.applicationType,j.applicationUrl,j.applicationEmail,j.sourceEvidenceJson,j.sourceVerifiedAt,s.name sourceName,s.url sourceUrl,s.sourceType,s.verified sourceVerified FROM match_results r JOIN jobs j ON j.id=r.jobId JOIN sources s ON s.id=j.sourceId WHERE r.runId=? AND s.sourceType='model_web_search' ORDER BY r.score DESC LIMIT ?`,
+            `SELECT r.*,j.title,j.company,j.city,j.education,j.graduationYear,j.workMode,j.industry,j.description,j.applicationType,j.applicationUrl,j.applicationEmail,j.sourceEvidenceJson,j.sourceVerifiedAt,s.name sourceName,s.url sourceUrl,s.sourceType,s.verified sourceVerified FROM match_results r JOIN jobs j ON j.id=r.jobId JOIN sources s ON s.id=j.sourceId WHERE r.runId=? AND s.sourceType='model_web_search' ORDER BY r.score DESC LIMIT ?`,
             run.id,
-            MATCH_RESULT_LIMIT,
+            matchLimit,
           ).map((r) => ({
             ...r,
             eligible: !!r.eligible,
@@ -60,7 +72,11 @@ export async function GET() {
               title: r.title,
               company: r.company,
               city: r.city,
+              education: r.education,
+              graduationYear: r.graduationYear,
               workMode: r.workMode,
+              industry: r.industry,
+              description: r.description,
               applicationType: r.applicationType,
               applicationUrl: r.applicationUrl,
               applicationEmail: r.applicationEmail,

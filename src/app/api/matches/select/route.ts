@@ -1,4 +1,4 @@
-import { MATCH_RESULT_LIMIT, normalizeVisibleResultIds } from "@/domain/match-visibility";
+import { MATCH_PAGE_SIZE, normalizeVisibleResultIds } from "@/domain/match-visibility";
 import { requireUser } from "@/infrastructure/auth";
 import { all, one, run, transaction } from "@/infrastructure/db";
 
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   }
 
   const resultId = typeof body?.id === "string" ? body.id.trim() : "";
-  if (!resultId || !Array.isArray(body?.visibleIds) || body.visibleIds.length > MATCH_RESULT_LIMIT)
+  if (!resultId || !Array.isArray(body?.visibleIds) || body.visibleIds.length > MATCH_PAGE_SIZE)
     return Response.json({ error: "可见岗位范围无效，请刷新页面后重试" }, { status: 400 });
 
   const anchor = one<{ runId: string }>(
@@ -36,21 +36,19 @@ export async function POST(req: Request) {
 
   if (typeof body.all === "boolean") {
     transaction(() => {
-      run("UPDATE match_results SET selected=0 WHERE runId=?", anchor.runId);
-      if (body.all)
-        run(
-          `UPDATE match_results SET selected=1 WHERE runId=? AND id IN (${placeholders})`,
-          anchor.runId,
-          ...visibleIds,
-        );
-    });
-  } else if (typeof body.selected === "boolean") {
-    transaction(() => {
       run(
-        `UPDATE match_results SET selected=0 WHERE runId=? AND id NOT IN (${placeholders})`,
+        `UPDATE match_results SET selected=? WHERE runId=? AND id IN (${placeholders})`,
+        body.all ? 1 : 0,
         anchor.runId,
         ...visibleIds,
       );
+    });
+  } else if (body.clearAll === true) {
+    transaction(() => {
+      run("UPDATE match_results SET selected=0 WHERE runId=?", anchor.runId);
+    });
+  } else if (typeof body.selected === "boolean") {
+    transaction(() => {
       run("UPDATE match_results SET selected=? WHERE id=? AND runId=?", body.selected ? 1 : 0, resultId, anchor.runId);
     });
   } else {
