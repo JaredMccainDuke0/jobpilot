@@ -1,48 +1,209 @@
 # JobPilot
 
-JobPilot 是一个帮助求职者完成简历解析、真实岗位匹配和邮件投递的在线工具。
+[![CI](https://github.com/VELIR5/jobpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/VELIR5/jobpilot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/VELIR5/jobpilot)](https://github.com/VELIR5/jobpilot)
 
-## 立即使用
+[简体中文](README.zh-CN.md) · [Live demo](https://job.vcrelay.com:8443) · [Issues](https://github.com/VELIR5/jobpilot/issues)
 
-[打开 JobPilot](https://job.vcrelay.com:8443)
+JobPilot is a resume-aware job matching and application assistant. It helps a
+candidate parse a resume, describe job preferences, search for real vacancies,
+review matching evidence, and prepare or submit an application after explicit
+confirmation.
 
-当前公网地址已于 2026-08-19 实际验证可访问。进入站点后，使用邮箱登录即可开始；不同邮箱的数据相互隔离。
+The repository contains a Next.js web application and a native WeChat
+mini-program client. Both clients use the same server-side domain and API
+contracts.
 
-## 怎么使用
+> The live demo is a deployment endpoint, not an availability or delivery
+> guarantee. Job data, model responses, and email delivery must be independently
+> reviewed by the user.
 
-1. 使用邮箱登录。
-2. 上传简历并确认解析结果。
-3. 填写目标城市、岗位方向和其他求职条件。
-4. 搜索匹配岗位，查看匹配原因和真实来源。
-5. 选择岗位并确认投递，或向指定的公开招聘邮箱投递。
+## What it does
 
-匹配结果会保留模型已经返回的最多 30 个岗位，并按每页 10 个展示。匹配页的关键词、城市、工作方式、行业、匹配状态和申请方式筛选只处理当前已保存结果，不会重新调用模型；筛选条件和页码保存在 URL 中，从岗位详情返回时会恢复。只有明确点击“搜索新岗位”才会发起新的模型搜索。
+- Email-based access with signed HttpOnly browser sessions.
+- Resume upload and deterministic PDF/DOCX text extraction with confirmation.
+- Preference capture for target city, role family, industry, and work mode.
+- Model-assisted web search with schema validation, city matching, source
+  evidence, deduplication, pagination, and local filtering.
+- Explicit separation between email-eligible vacancies and official manual
+  application channels.
+- Application tasks, idempotency, status history, and user-scoped records.
+- Optional Google OAuth and central platform email relay through Resend.
+- Native WeChat mini-program pages for login, resume, preferences, matches, and
+  application history.
 
-## 你会看到什么岗位
+## Safety boundaries
 
-JobPilot 只展示满足以下条件的候选岗位：
+JobPilot deliberately favors an honest incomplete result over a fabricated one.
 
-- 岗位真实存在，并有可访问的公开来源页面。
-- 工作地点和方向符合用户填写的条件。
-- 来源页面明确公开了可用于投递的招聘邮箱。
-- 系统能在同一页面核验招聘邮箱，以及岗位名称或公司信息。
+- External job pages and model output are untrusted input.
+- A job must pass the configured source, URL, city, and schema checks before it
+  becomes a formal result.
+- The system never guesses a hiring email, company, vacancy, URL, qualification,
+  or delivery result.
+- A vacancy without a directly verified application email remains a manual or
+  official-portal action; it is not auto-emailed.
+- Real email submission requires user selection, final confirmation, valid
+  sending configuration, and an idempotent application task.
+- Tests and CI use mocks and do not send real email or search a user's resume.
+- The project does not bypass login, CAPTCHA, rate limits, access controls, or
+  site rules.
 
-没有公开招聘邮箱、只有网页申请入口、使用普通客服邮箱、来源无法核验或已经展示过的岗位不会进入候选列表。真实合格岗位不足时，系统会如实显示较少结果，不会用虚构岗位或邮箱补足数量。
+See [`docs/SECURITY_PRIVACY.md`](docs/SECURITY_PRIVACY.md) and
+[`SECURITY.md`](SECURITY.md) for the full boundary.
 
-## 邮件如何发送
+## Architecture
 
-投递邮件由 JobPilot 的平台域名统一代发，并附上用户确认的简历。企业直接回复邮件时，回复会发送到用户登录 JobPilot 时使用的邮箱。
+```text
+Web browser / WeChat mini-program
+                 |
+                 v
+        Next.js API routes and middleware
+                 |
+      signed Cookie or Bearer session
+                 |
+                 v
+     Domain rules + Node.js built-in SQLite
+          |                    |
+          v                    v
+    Resume parser       Search/model adapter
+          |                    |
+          +----------+---------+
+                     v
+             Application task state
+                     |
+                     v
+       User-confirmed submission adapter
+```
 
-平台代发会将一份邮件副本密送给用户自己，收件企业看不到这个密送地址。JobPilot 不会在用户最终确认前自动发送投递邮件。
+The server stores its SQLite database at `%LOCALAPPDATA%\JobPilot\jobpilot.db`
+on Windows, or under the local application data directory used by the runtime.
+`node:sqlite` is used directly; Prisma is retained only for the existing schema
+and initialization script, not as the runtime database engine.
 
-## 隐私与安全
+## Requirements
 
-- 简历、匹配结果和投递记录按登录邮箱隔离。
-- 模型搜索前会移除姓名、邮箱和电话号码等非必要联系信息。
-- 不公开模型密钥、邮件服务密钥、访问密码或用户个人资料。
-- 不猜测招聘邮箱，不伪造岗位、来源、发送结果或送达证据。
-- 不绕过招聘网站的登录、验证码或访问限制。
+- Node.js 22.5 or newer. Node 22 is required for the built-in SQLite runtime.
+- npm with network access to install the locked dependencies.
+- A model provider with an OpenAI Responses-compatible endpoint for live search.
+- Google Cloud OAuth credentials only if Google login is enabled.
+- WeChat mini-program credentials only if the mini-program login exchange is
+  enabled.
+- Resend sender credentials only if central email relay is enabled.
 
-## 使用提示
+## Local development
 
-联网搜索和来源核验需要一定时间。若上游模型服务暂时超时，页面会保留已有匹配结果，可稍后点击重试。最终投递前请再次确认岗位内容、收件邮箱和简历版本。
+```powershell
+npm ci
+Copy-Item .env.example .env
+# Fill the required values in .env using your own local secrets.
+npm run db:push
+npm run dev
+```
+
+Open `http://localhost:3000`. The `.env` file, database, uploads, and logs are
+ignored by Git and must never be committed.
+
+The minimum useful server configuration includes:
+
+| Variable | Purpose |
+| --- | --- |
+| `JOBPILOT_SESSION_SECRET` | Signs browser and Bearer sessions. Use a long random value. |
+| `JOBPILOT_ACCESS_PASSWORD_HASH` | Shared gate password hash for the sign-in page. |
+| `JOBPILOT_INVITE_PASSWORD_HASH` | Invitation hash used for account registration. |
+| `JOBPILOT_MODEL_BASE_URL` | OpenAI-compatible provider base URL. |
+| `JOBPILOT_MODEL_API_KEY` | Server-only model credential. |
+| `JOBPILOT_MODEL_NAME` | Provider model identifier. |
+| `JOBPILOT_MODEL_REASONING` | Optional reasoning effort accepted by the provider. |
+
+All supported variables and security notes are listed in [`.env.example`](.env.example).
+The runtime does not read `DATABASE_URL`; local SQLite location is selected by
+the Node runtime and `LOCALAPPDATA`.
+
+## Production start
+
+```powershell
+npm ci
+npm run db:push
+npm run build
+npm run start
+```
+
+`next start` loads the production build once at startup. After changing server
+code or environment configuration, rebuild and restart the process. Put the
+application behind HTTPS and a deployment-specific access control layer; a
+tunnel only supplies transport and does not replace authentication or tenant
+isolation.
+
+## WeChat mini-program
+
+1. Import [`miniapp/`](miniapp/) into WeChat Developer Tools.
+2. Replace the placeholder AppID in `project.config.json` with your own AppID.
+3. Set the production HTTPS API origin in [`miniapp/config.js`](miniapp/config.js).
+4. Configure the API origin as a legal request and upload domain in WeChat.
+5. Run `npm run check:miniapp` before device testing.
+
+The mini-program package contains no model key, mail key, database, resume, or
+server session secret. Real WeChat login, upload, navigation, and device
+acceptance still require WeChat Developer Tools and a real device.
+
+## API surface
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/gate` | Verify the shared access gate. |
+| `POST` | `/api/invite` | Register or start web email access. |
+| `POST` / `PUT` | `/api/miniapp/session` | Exchange a WeChat login code or bind an account. |
+| `GET` | `/api/state` | Read the current user's scoped application state. |
+| `POST` | `/api/resume` | Upload and parse a resume. |
+| `POST` | `/api/resume/confirm` | Confirm the parsed resume version. |
+| `POST` | `/api/preferences` | Save confirmed job preferences. |
+| `POST` | `/api/matches` | Run a live search and save matching results. |
+| `POST` | `/api/matches/select` | Select or clear a vacancy. |
+| `POST` | `/api/applications` | Create confirmed application tasks. |
+
+The API accepts either the signed web Cookie or a separate Bearer session. A
+mini-program token is never written into a browser Cookie.
+
+## Verification
+
+Run the same checks locally and in CI:
+
+```powershell
+npm run typecheck
+npm test
+npm run check:miniapp
+npm run audit
+npm run build
+```
+
+The latest local baseline on 2026-09-04 was 18 test files and 66 tests, with
+TypeScript checking and the production build passing. The build may print
+Node.js's known `node:sqlite` experimental warning; the command exit status is
+the authoritative result.
+
+Automated checks do not replace deployment or device acceptance. The following
+remain environment-dependent:
+
+- Real model-provider search and its source availability.
+- Production database, OAuth, WeChat, and email-provider configuration.
+- Real WeChat login, upload, navigation, and application flow.
+- Actual email delivery. A submission record is not proof of delivery.
+
+## Project documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): domain and adapter boundaries.
+- [`docs/CROSS_PLATFORM_ARCHITECTURE.md`](docs/CROSS_PLATFORM_ARCHITECTURE.md): H5 and mini-program contract.
+- [`docs/SECURITY_PRIVACY.md`](docs/SECURITY_PRIVACY.md): application privacy model.
+- [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md): historical verification evidence.
+- [`docs/GOOGLE_OAUTH_SETUP.md`](docs/GOOGLE_OAUTH_SETUP.md): Google OAuth setup.
+- [`HANDOFF_2026-09-02.md`](HANDOFF_2026-09-02.md): current project handoff.
+
+## Contributing and license
+
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request. Report
+security issues privately according to [`SECURITY.md`](SECURITY.md).
+
+JobPilot is released under the [MIT License](LICENSE). Third-party packages
+retain their own licenses.

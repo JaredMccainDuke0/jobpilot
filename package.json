@@ -2,20 +2,46 @@
   "name": "jobpilot",
   "version": "0.1.0",
   "private": true,
+  "description": "Real job matching and email application assistant with resume parsing and verified job sources.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VELIR5/jobpilot.git"
+  },
+  "homepage": "https://github.com/VELIR5/jobpilot",
+  "bugs": {
+    "url": "https://github.com/VELIR5/jobpilot/issues"
+  },
+  "license": "MIT",
+  "keywords": [
+    "job-search",
+    "resume-parser",
+    "nextjs",
+    "wechat-mini-program",
+    "sqlite"
+  ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.8.15"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:miniapp": "node scripts/check-miniapp.mjs",
+    "audit": "npm audit --audit-level=moderate",
+    "check": "npm run typecheck && npm run test && npm run check:miniapp && npm run audit",
     "db:push": "tsx prisma/seed.ts --init-only",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
-    "mammoth": "^1.12.1",
-    "next": "^15.4.6",
+    "mammoth": "^1.12.2",
+    "next": "^16.3.4",
     "nodemailer": "^9.0.5",
     "pdfjs-dist": "^6.2.108",
     "react": "^19.1.1",
