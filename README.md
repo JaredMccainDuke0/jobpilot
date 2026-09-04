@@ -19,6 +19,15 @@ contracts.
 > guarantee. Job data, model responses, and email delivery must be independently
 > reviewed by the user.
 
+## Try JobPilot
+
+Open the public web application:
+
+**[https://job.vcrelay.com:8443](https://job.vcrelay.com:8443)**
+
+Sign in with your email, upload a resume, set your job preferences, and review
+matched vacancies before deciding whether to apply.
+
 ## What it does
 
 - Email-based access with signed HttpOnly browser sessions.
