@@ -53,35 +53,6 @@ JobPilot deliberately favors an honest incomplete result over a fabricated one.
 See [`docs/SECURITY_PRIVACY.md`](docs/SECURITY_PRIVACY.md) and
 [`SECURITY.md`](SECURITY.md) for the full boundary.
 
-## Architecture
-
-```text
-Web browser / WeChat mini-program
-                 |
-                 v
-        Next.js API routes and middleware
-                 |
-      signed Cookie or Bearer session
-                 |
-                 v
-     Domain rules + Node.js built-in SQLite
-          |                    |
-          v                    v
-    Resume parser       Search/model adapter
-          |                    |
-          +----------+---------+
-                     v
-             Application task state
-                     |
-                     v
-       User-confirmed submission adapter
-```
-
-The server stores its SQLite database at `%LOCALAPPDATA%\JobPilot\jobpilot.db`
-on Windows, or under the local application data directory used by the runtime.
-`node:sqlite` is used directly; Prisma is retained only for the existing schema
-and initialization script, not as the runtime database engine.
-
 ## Requirements
 
 - Node.js 22.5 or newer. Node 22 is required for the built-in SQLite runtime.
@@ -148,62 +119,7 @@ The mini-program package contains no model key, mail key, database, resume, or
 server session secret. Real WeChat login, upload, navigation, and device
 acceptance still require WeChat Developer Tools and a real device.
 
-## API surface
+## License and security
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `POST` | `/api/gate` | Verify the shared access gate. |
-| `POST` | `/api/invite` | Register or start web email access. |
-| `POST` / `PUT` | `/api/miniapp/session` | Exchange a WeChat login code or bind an account. |
-| `GET` | `/api/state` | Read the current user's scoped application state. |
-| `POST` | `/api/resume` | Upload and parse a resume. |
-| `POST` | `/api/resume/confirm` | Confirm the parsed resume version. |
-| `POST` | `/api/preferences` | Save confirmed job preferences. |
-| `POST` | `/api/matches` | Run a live search and save matching results. |
-| `POST` | `/api/matches/select` | Select or clear a vacancy. |
-| `POST` | `/api/applications` | Create confirmed application tasks. |
-
-The API accepts either the signed web Cookie or a separate Bearer session. A
-mini-program token is never written into a browser Cookie.
-
-## Verification
-
-Run the same checks locally and in CI:
-
-```powershell
-npm run typecheck
-npm test
-npm run check:miniapp
-npm run audit
-npm run build
-```
-
-The latest local baseline on 2026-09-04 was 18 test files and 66 tests, with
-TypeScript checking and the production build passing. The build may print
-Node.js's known `node:sqlite` experimental warning; the command exit status is
-the authoritative result.
-
-Automated checks do not replace deployment or device acceptance. The following
-remain environment-dependent:
-
-- Real model-provider search and its source availability.
-- Production database, OAuth, WeChat, and email-provider configuration.
-- Real WeChat login, upload, navigation, and application flow.
-- Actual email delivery. A submission record is not proof of delivery.
-
-## Project documentation
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): domain and adapter boundaries.
-- [`docs/CROSS_PLATFORM_ARCHITECTURE.md`](docs/CROSS_PLATFORM_ARCHITECTURE.md): H5 and mini-program contract.
-- [`docs/SECURITY_PRIVACY.md`](docs/SECURITY_PRIVACY.md): application privacy model.
-- [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md): historical verification evidence.
-- [`docs/GOOGLE_OAUTH_SETUP.md`](docs/GOOGLE_OAUTH_SETUP.md): Google OAuth setup.
-- [`HANDOFF_2026-09-02.md`](HANDOFF_2026-09-02.md): current project handoff.
-
-## Contributing and license
-
-Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request. Report
-security issues privately according to [`SECURITY.md`](SECURITY.md).
-
-JobPilot is released under the [MIT License](LICENSE). Third-party packages
-retain their own licenses.
+JobPilot is released under the [MIT License](LICENSE). Please report security
+issues privately according to [`SECURITY.md`](SECURITY.md).

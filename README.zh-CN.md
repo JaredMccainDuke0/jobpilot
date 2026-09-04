@@ -42,34 +42,6 @@ JobPilot 选择如实返回较少结果，而不是用虚构结果补足数量�
 完整边界见 [`docs/SECURITY_PRIVACY.md`](docs/SECURITY_PRIVACY.md) 和
 [`SECURITY.md`](SECURITY.md)。
 
-## 架构
-
-```text
-网页端 / 微信小程序
-          |
-          v
-     Next.js API 路由和 middleware
-          |
-   签名 Cookie 或 Bearer 会话
-          |
-          v
-   领域规则 + Node.js 内置 SQLite
-        |                    |
-        v                    v
-    简历解析            搜索/模型适配器
-        |                    |
-        +---------+----------+
-                  v
-            投递任务状态
-                  |
-                  v
-         用户确认后的投递适配器
-```
-
-Windows 默认数据库位于 `%LOCALAPPDATA%\JobPilot\jobpilot.db`，其他系统
-使用运行时对应的本地应用数据目录。运行时直接使用 Node 22 的 `node:sqlite`；
-Prisma 只保留在现有 schema 和初始化脚本中，不作为运行时数据库引擎。
-
 ## 环境要求
 
 - Node.js 22.5 或更高版本。内置 SQLite 运行时要求 Node 22。
@@ -131,59 +103,7 @@ npm run start
 小程序包不包含模型密钥、邮件密钥、数据库、简历或服务端会话密钥。微信
 真实登录、上传、页面跳转和设备验收仍必须在微信开发者工具和真机中完成。
 
-## API 接口
+## 许可证和安全
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| `POST` | `/api/gate` | 校验共享访问门槛。 |
-| `POST` | `/api/invite` | 注册或开始网页端邮箱访问。 |
-| `POST` / `PUT` | `/api/miniapp/session` | 交换微信登录 code 或绑定账号。 |
-| `GET` | `/api/state` | 读取当前用户隔离后的状态。 |
-| `POST` | `/api/resume` | 上传并解析简历。 |
-| `POST` | `/api/resume/confirm` | 确认解析后的简历版本。 |
-| `POST` | `/api/preferences` | 保存已确认的求职偏好。 |
-| `POST` | `/api/matches` | 执行实时搜索并保存匹配结果。 |
-| `POST` | `/api/matches/select` | 选择或取消选择岗位。 |
-| `POST` | `/api/applications` | 创建已确认的投递任务。 |
-
-API 同时接受签名网页 Cookie 或独立 Bearer 会话。小程序 Token 不会被写入
-网页 Cookie。
-
-## 验证状态
-
-本地和 CI 使用同一组检查：
-
-```powershell
-npm run typecheck
-npm test
-npm run check:miniapp
-npm run audit
-npm run build
-```
-
-2026-09-04 的最新本地基线为 18 个测试文件、66 项测试通过，TypeScript
-检查和生产构建通过。构建可能输出 Node.js 已知的 `node:sqlite` 实验性警告；
-最终应以命令退出状态为准。
-
-自动化检查不能替代部署和真机验收。以下事项仍依赖具体环境：
-
-- 真实模型服务搜索和来源网站可用性。
-- 生产数据库、OAuth、微信和邮件服务配置。
-- 真正的微信登录、上传、页面跳转和投递流程。
-- 实际邮件送达。投递记录不等于送达证据。
-
-## 项目文档
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)：领域和适配器边界。
-- [`docs/CROSS_PLATFORM_ARCHITECTURE.md`](docs/CROSS_PLATFORM_ARCHITECTURE.md)：H5 与小程序契约。
-- [`docs/SECURITY_PRIVACY.md`](docs/SECURITY_PRIVACY.md)：应用隐私模型。
-- [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md)：历史验证证据。
-- [`docs/GOOGLE_OAUTH_SETUP.md`](docs/GOOGLE_OAUTH_SETUP.md)：Google OAuth 配置。
-- [`HANDOFF_2026-09-02.md`](HANDOFF_2026-09-02.md)：当前项目交接文档。
-
-## 贡献和许可证
-
-提交 Pull Request 前请阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。安全问题
-请按照 [`SECURITY.md`](SECURITY.md) 私下报告。
-
-JobPilot 使用 [MIT License](LICENSE) 发布。第三方依赖继续遵循各自的许可证。
+JobPilot 使用 [MIT License](LICENSE) 发布。安全问题请按照 [`SECURITY.md`](SECURITY.md)
+私下报告。
