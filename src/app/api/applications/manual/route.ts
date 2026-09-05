@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { buildJobFingerprint } from "@/infrastructure/job-search";
+import { buildJobFingerprint } from "@/domain/job-identity";
 import { processApplicationTask } from "@/application/process-application-task";
 import { requireUser } from "@/infrastructure/auth";
 import { id, now, one, run, transaction } from "@/infrastructure/db";

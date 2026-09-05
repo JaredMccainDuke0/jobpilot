@@ -1,5 +1,5 @@
-// Five is the minimum search target. Store more than one page so results already
-// returned by the provider are not discarded, without starting extra model calls.
+// Keep enough catalog matches for local pagination while bounding each user's
+// match snapshot.
 export const MATCH_RESULT_TARGET = 5;
 export const MATCH_RESULT_STORAGE_LIMIT = 30;
 export const MATCH_PAGE_SIZE = 10;

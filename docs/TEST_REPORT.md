@@ -1,6 +1,35 @@
 # Test Report
 
-Executed on Windows with Node.js 22.17.0. Latest verification: 2026-08-17.
+## 2026-09-05 session — scheduled local job catalog
+
+The user-facing match request now reads a local, freshness-bounded job catalog.
+A separate scheduler/worker fetches configured public Greenhouse, Lever, JSON,
+RSS, or Atom feeds, normalizes records, deduplicates them, hides expired or
+stale jobs, enforces an active-row limit, and records refresh status. No model
+web-search request is made when a user matches jobs. No real feed was configured
+for this local verification run, so no external vacancy was imported and no
+email was sent.
+
+Verification:
+
+- `npm run typecheck`: passed.
+- `npm test`: 20 files, 59 tests passed.
+- `npm run check:miniapp`: passed for all mini-program JSON and JavaScript files.
+- `npm run build`: passed with Next.js 16.3.4; only the known Node.js
+  `node:sqlite` experimental warning was emitted.
+- `npm audit --audit-level=moderate`: 0 vulnerabilities.
+- Feed and collector tests cover Greenhouse, Lever, generic JSON, RSS/Atom
+  parsing, malformed configuration, private URL rejection, freshness
+  rejection, refresh records, duplicate source IDs, planned-city evidence, and
+  local catalog-only search.
+
+Not verified in this session: production source authorization/configuration,
+live feed availability, server worker uptime, WeChat device acceptance, and
+real email delivery.
+
+The entries below are historical verification sessions. The current verification
+summary is recorded above. Historical claims about model search or seed jobs do
+not describe the current catalog architecture.
 
 ## 2026-08-17 session — switch runtime model to gpt-5.6-sol
 

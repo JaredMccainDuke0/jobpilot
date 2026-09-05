@@ -350,7 +350,7 @@ function Preferences({ state, go, startSearch }: { state: State; go: any; startS
       {previous.rawText && (
         <p className="muted">已填入上次的求职条件，可直接修改后重新匹配。</p>
       )}
-      {busy && <p className="inline-notice" role="status">正在搜索匹配岗位，当前操作可能需要一些时间。</p>}
+      {busy && <p className="inline-notice" role="status">正在从岗位库匹配最新岗位，请稍候。</p>}
       {searchError && <p className="error" role="alert">{searchError} 请检查网络后重新提交。</p>}
       <form
         className="form-grid"
@@ -425,7 +425,7 @@ function Preferences({ state, go, startSearch }: { state: State; go: any; startS
           />
         </label>
         <button className="primary" disabled={busy}>
-          {busy ? "正在重新计算…" : "保存条件并重新匹配"}
+          {busy ? "正在匹配…" : "保存条件并查看岗位"}
         </button>
       </form>
     </section>
@@ -507,6 +507,24 @@ function InlineActionError({
     </div>
   );
 }
+function CatalogStatusNotice({ catalog }: { catalog: any }) {
+  if (!catalog?.configured)
+    return (
+      <p className="error" role="status">
+        岗位库正在等待管理员配置公开岗位数据源，当前不会临时联网搜索。
+      </p>
+    );
+  const refreshed = catalog.lastRefreshAt
+    ? new Date(catalog.lastRefreshAt).toLocaleString("zh-CN", { hour12: false })
+    : "尚未完成首次更新";
+  const failed = catalog.lastStatus === "failed" || catalog.lastStatus === "partial";
+  return (
+    <p className={failed ? "error" : "inline-notice"} role="status">
+      岗位库 {catalog.freshJobCount ?? 0} 个最新岗位 · 最近更新：{refreshed} · 每 {catalog.refreshIntervalMinutes || 60} 分钟后台更新
+      {failed ? " · 上次更新未全部完成，系统会继续重试" : ""}
+    </p>
+  );
+}
 function Matches({ state, setState, reload, go, routeSearch, autoStart, onAutoStartHandled }: {
   state: State; setState: any; reload: any; go: any; routeSearch: string;
   autoStart: boolean; onAutoStartHandled: () => void;
@@ -534,6 +552,7 @@ function Matches({ state, setState, reload, go, routeSearch, autoStart, onAutoSt
     | { kind: "all"; selected: boolean; clearAll?: boolean; message: string }
     | null
   >(null);
+  const catalog = state.catalog || {};
 
   useEffect(() => {
     setDraftFilters(view.filters);
@@ -621,28 +640,28 @@ function Matches({ state, setState, reload, go, routeSearch, autoStart, onAutoSt
   return (
     <section className={selected ? "with-action" : ""}>
       <div className="page-head">
-        <div><div className="eyebrow">按确定性条件优先排序</div><h1>匹配结果</h1></div>
+        <div><div className="eyebrow">来自后台岗位库</div><h1>匹配结果</h1></div>
         <button className="new-search" disabled={busy} onClick={() => setConfirmSearch(true)}>
-          <RefreshCw className={busy ? "spin" : undefined} /> {busy ? "正在搜索" : "搜索新岗位"}
+          <RefreshCw className={busy ? "spin" : undefined} /> {busy ? "正在匹配" : "重新匹配"}
         </button>
       </div>
-      <p className="muted">分数综合硬性条件和可确认的能力证据；筛选当前结果不会调用模型。</p>
+      <CatalogStatusNotice catalog={catalog} />
       {confirmSearch && (
         <div className="search-confirm" role="alert">
-          <div><b>确认搜索新岗位？</b><p>这会调用模型并消耗 Token；筛选当前结果不需要重新搜索。</p></div>
-          <div><button type="button" onClick={() => setConfirmSearch(false)}>取消</button><button className="primary" type="button" onClick={() => void runSearch()}>确认并搜索</button></div>
+          <div><b>根据最新岗位库重新匹配？</b><p>岗位库由后台定时更新，本次只读取本地最新岗位，不会临时联网搜索。</p></div>
+          <div><button type="button" onClick={() => setConfirmSearch(false)}>取消</button><button className="primary" type="button" onClick={() => void runSearch()}>确认并匹配</button></div>
         </div>
       )}
-      {busy && results.length > 0 && <p className="inline-notice" role="status">正在搜索新岗位；当前结果仍然保留。</p>}
+      {busy && results.length > 0 && <p className="inline-notice" role="status">正在从岗位库重新匹配；当前结果仍然保留。</p>}
       {!busy && !state.run?.consumedAt && state.run?.searchWarning && <p className="error">{state.run.searchWarning}</p>}
       {searchMessage && <p className="inline-notice" role="status">{searchMessage}</p>}
-      {searchFailure && <InlineActionError title="重新匹配失败" message={searchFailure} solution="请检查网络后重试；已有匹配结果不会被清除。" onRetry={() => void runSearch()} busy={busy} />}
+      {searchFailure && <InlineActionError title="岗位库匹配失败" message={searchFailure} solution="请稍后重试；已有匹配结果不会被清除。" onRetry={() => void runSearch()} busy={busy} />}
       {selectionFailure && <InlineActionError title="岗位选择未保存" message={selectionFailure.message} solution="页面已恢复到保存前状态，可以直接重试。" onRetry={() => selectionFailure.kind === "one" ? void selectOne(selectionFailure.id, selectionFailure.selected) : selectionFailure.clearAll ? void clearSelection() : void selectPage(selectionFailure.selected)} busy={allPending || pendingIds.size > 0} />}
 
       {busy && !results.length ? (
-        <div className="empty" role="status" aria-live="polite"><RefreshCw className="spin" aria-hidden="true" /><h2>正在搜索匹配岗位</h2><p>正在根据已保存的求职条件检索真实岗位，请稍候。</p></div>
+        <div className="empty" role="status" aria-live="polite"><RefreshCw className="spin" aria-hidden="true" /><h2>正在匹配岗位库</h2><p>正在根据已保存的求职条件读取最新岗位，请稍候。</p></div>
       ) : !results.length ? (
-        <Empty title={state.run?.consumedAt ? "本轮岗位已处理完成" : "暂无匹配结果"} text={state.run?.consumedAt ? "已投递岗位仍保留在投递记录中。点击下方按钮搜索下一批岗位。" : "请先填写求职需求并搜索岗位。"} action={state.run?.consumedAt ? "搜索新岗位" : "填写求职需求"} onClick={() => state.run?.consumedAt ? setConfirmSearch(true) : go("/onboarding/preferences")} />
+        <Empty title={state.run?.consumedAt ? "本轮岗位已处理完成" : "暂无符合条件的最新岗位"} text={state.run?.consumedAt ? "已投递岗位仍保留在投递记录中。重新匹配会从岗位库读取下一批未处理岗位。" : "请先填写求职需求；岗位库由后台定时更新。"} action={state.run?.consumedAt ? "重新匹配" : "填写求职需求"} onClick={() => state.run?.consumedAt ? setConfirmSearch(true) : go("/onboarding/preferences")} />
       ) : (
         <>
           <div className="list-tools">
@@ -663,7 +682,7 @@ function Matches({ state, setState, reload, go, routeSearch, autoStart, onAutoSt
           )}
           <div className="result-summary"><span>共 {filteredResults.length} 个结果{filterCount ? `（原始 ${results.length} 个）` : ""}</span><span>{filteredResults.length ? `显示 ${pagination.start + 1}–${pagination.end}` : "没有符合条件的岗位"}</span></div>
           {!filteredResults.length ? (
-            <Empty title="没有符合筛选条件的岗位" text="这些筛选只作用于当前已搜索结果，不会调用模型。" action="清除筛选" onClick={() => go("/matches")} />
+            <Empty title="没有符合筛选条件的岗位" text="这些筛选只作用于当前匹配结果，不会触发联网搜索。" action="清除筛选" onClick={() => go("/matches")} />
           ) : (
             <div className="job-list">{pageResults.map((result: any) => <JobRow key={result.id} r={result} pending={allPending || pendingIds.has(result.id)} onSelect={selectOne} go={go} backHref={buildMatchesHref(view.filters, pagination.page)} />)}</div>
           )}
@@ -1314,23 +1333,7 @@ function ImprovedResumeUpload({ go, reload }: { go: (path: string) => void; relo
 
 function ConnectionSettings({ state, go }: { state: State; go: any }) {
   const sender = state.emailSender || {};
-  const [modelBusy, setModelBusy] = useState(false);
-  const [modelStatus, setModelStatus] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
-  const testModel = async () => {
-    setModelBusy(true);
-    setModelStatus(null);
-    try {
-      const result = await request("/api/model", { method: "POST" });
-      setModelStatus({
-        kind: result.ok ? "ok" : "error",
-        message: result.ok ? "模型服务连接正常。" : "模型服务暂不可用，请稍后重试。",
-      });
-    } catch {
-      setModelStatus({ kind: "error", message: "模型服务暂不可用，请稍后重试。" });
-    } finally {
-      setModelBusy(false);
-    }
-  };
+  const catalog = state.catalog || {};
   return (
     <section>
       <h1>我的</h1>
@@ -1363,30 +1366,17 @@ function ConnectionSettings({ state, go }: { state: State; go: any }) {
         )}
       </div>
       <div className="detail-group">
-        <h2>模型服务</h2>
+        <h2>岗位库</h2>
         <p className="muted">
-          由站点管理员统一提供，Base URL、模型名和访问密钥不会发送到浏览器。
+          岗位由后台按计划从公开数据源更新；匹配时只读取岗位库，不会临时把你的简历发送给搜索服务。
         </p>
-        <button
-          type="button"
-          disabled={modelBusy}
-          onClick={() => void testModel()}
-        >
-          <span className="loading-label">
-            {modelBusy && <RefreshCw className="spin" />}
-            {modelBusy ? "正在测试…" : "测试模型服务"}
-          </span>
-        </button>
-        {modelStatus?.kind === "ok" && <p className="inline-success" role="status">{modelStatus.message}</p>}
-        {modelStatus?.kind === "error" && (
-          <InlineActionError
-            title="模型服务暂不可用"
-            message={modelStatus.message}
-            solution="请稍后重试；模型配置由站点管理员统一维护。"
-            onRetry={() => void testModel()}
-            busy={modelBusy}
-          />
-        )}
+        <p>
+          {catalog.configured ? `当前有 ${catalog.freshJobCount || 0} 个最新岗位` : "岗位库尚未配置"}
+          {catalog.lastRefreshAt ? ` · 最近更新 ${new Date(catalog.lastRefreshAt).toLocaleString("zh-CN", { hour12: false })}` : ""}
+        </p>
+        {catalog.lastStatus === "failed" || catalog.lastStatus === "partial" ? (
+          <p className="error" role="status">上次岗位库更新未全部完成，系统会继续按计划重试。</p>
+        ) : null}
       </div>
       <div className="detail-group">
         <h2>发信方式</h2>

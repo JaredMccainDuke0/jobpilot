@@ -5,11 +5,13 @@ const mocks = vi.hoisted(() => ({
   one: vi.fn(),
   all: vi.fn(),
   getEmailSender: vi.fn(),
+  getCatalogStatus: vi.fn(),
 }));
 
 vi.mock("@/infrastructure/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/infrastructure/db", () => ({ one: mocks.one, all: mocks.all }));
 vi.mock("@/infrastructure/email-auth", () => ({ getEmailSender: mocks.getEmailSender }));
+vi.mock("@/infrastructure/job-catalog", () => ({ getCatalogStatus: mocks.getCatalogStatus }));
 
 import { GET } from "./route";
 
@@ -27,6 +29,20 @@ beforeEach(() => {
     return [];
   });
   mocks.getEmailSender.mockReturnValue({ config: null, error: "unavailable" });
+  mocks.getCatalogStatus.mockReturnValue({
+    configured: false,
+    sourceCount: 0,
+    enabledSourceCount: 0,
+    activeJobCount: 0,
+    freshJobCount: 0,
+    lastRefreshAt: null,
+    lastSuccessAt: null,
+    lastStatus: "disabled",
+    lastError: null,
+    nextRefreshAt: null,
+    refreshIntervalMinutes: 60,
+    staleAfterHours: 48,
+  });
 });
 
 describe("state for archived match runs", () => {
@@ -61,6 +77,8 @@ describe("state for archived match runs", () => {
     expect(mocks.all).toHaveBeenCalledWith(
       expect.stringContaining("ORDER BY r.score DESC LIMIT ?"),
       "run-active",
+      expect.any(String),
+      expect.any(String),
       10,
     );
   });
@@ -82,6 +100,8 @@ describe("state for archived match runs", () => {
     expect(mocks.all).toHaveBeenCalledWith(
       expect.stringContaining("ORDER BY r.score DESC LIMIT ?"),
       "run-active",
+      expect.any(String),
+      expect.any(String),
       30,
     );
   });

@@ -1,6 +1,8 @@
 import { all, one } from "@/infrastructure/db";
 import { requireUser } from "@/infrastructure/auth";
 import { getEmailSender } from "@/infrastructure/email-auth";
+import { getCatalogStatus } from "@/infrastructure/job-catalog";
+import { catalogSettings, freshnessCutoff } from "@/domain/job-catalog";
 import { MATCH_PAGE_SIZE, MATCH_RESULT_STORAGE_LIMIT } from "@/domain/match-visibility";
 
 function parseStoredJson(value: unknown) {
@@ -8,16 +10,6 @@ function parseStoredJson(value: unknown) {
   try {
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function configuredModelProvider() {
-  const value = process.env.JOBPILOT_MODEL_BASE_URL;
-  if (!value) return null;
-  try {
-    return new URL(value).hostname;
   } catch {
     return null;
   }
@@ -38,6 +30,8 @@ export async function GET(request: Request) {
   try {
     const user = await requireUser();
     const matchLimit = requestedMatchLimit(request);
+    const catalogCutoff = freshnessCutoff(new Date(), catalogSettings().staleAfterHours);
+    const catalogNow = new Date().toISOString();
     const resume = one<any>(
       "SELECT * FROM resumes WHERE userId=? ORDER BY updatedAt DESC LIMIT 1",
       user.id,
@@ -61,8 +55,10 @@ export async function GET(request: Request) {
       run.results = run.consumedAt
         ? []
         : all<any>(
-            `SELECT r.*,j.title,j.company,j.city,j.education,j.graduationYear,j.workMode,j.industry,j.description,j.applicationType,j.applicationUrl,j.applicationEmail,j.sourceEvidenceJson,j.sourceVerifiedAt,s.name sourceName,s.url sourceUrl,s.sourceType,s.verified sourceVerified FROM match_results r JOIN jobs j ON j.id=r.jobId JOIN sources s ON s.id=j.sourceId WHERE r.runId=? AND s.sourceType='model_web_search' ORDER BY r.score DESC LIMIT ?`,
+            `SELECT r.*,j.title,j.company,j.city,j.education,j.graduationYear,j.workMode,j.industry,j.description,j.applicationType,j.applicationUrl,j.applicationEmail,j.sourceEvidenceJson,j.sourceVerifiedAt,j.publishedAt,j.expiresAt,j.firstSeenAt,j.lastSeenAt,s.name sourceName,s.url sourceUrl,s.sourceType,s.verified sourceVerified FROM match_results r JOIN jobs j ON j.id=r.jobId JOIN sources s ON s.id=j.sourceId WHERE r.runId=? AND s.sourceType='catalog_feed' AND j.catalogState='active' AND EXISTS (SELECT 1 FROM catalog_sources cs WHERE cs.id=j.catalogSourceKey AND cs.enabled=1) AND j.lastSeenAt>=? AND (j.expiresAt IS NULL OR j.expiresAt>?) ORDER BY r.score DESC LIMIT ?`,
             run.id,
+            catalogCutoff,
+            catalogNow,
             matchLimit,
           ).map((r) => ({
             ...r,
@@ -80,6 +76,10 @@ export async function GET(request: Request) {
               applicationType: r.applicationType,
               applicationUrl: r.applicationUrl,
               applicationEmail: r.applicationEmail,
+              publishedAt: r.publishedAt || null,
+              expiresAt: r.expiresAt || null,
+              firstSeenAt: r.firstSeenAt || null,
+              lastSeenAt: r.lastSeenAt || null,
               source: {
                 name: r.sourceName,
                 url: r.sourceUrl,
@@ -124,8 +124,7 @@ export async function GET(request: Request) {
         ready: !!sender.config,
         error: sender.config ? null : sender.error || "发信服务暂不可用",
       },
-      modelConfigured: !!process.env.JOBPILOT_MODEL_API_KEY,
-      modelProvider: configuredModelProvider(),
+      catalog: getCatalogStatus(),
     });
   } catch {
     return Response.json({ error: "请先登录" }, { status: 401 });

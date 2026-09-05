@@ -145,7 +145,7 @@ describe("processApplicationTask", () => {
     );
   });
 
-  it("does not send an unverified model-sourced recipient", async () => {
+  it("does not send an unverified catalog-sourced recipient", async () => {
     mocks.one.mockImplementation((sql: string) => {
       if (sql.includes("SELECT * FROM application_tasks"))
         return { id: "task-1", jobId: "job-1", resumeVersionId: "stored-version" };

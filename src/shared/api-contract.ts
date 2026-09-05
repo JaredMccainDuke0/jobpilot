@@ -1,9 +1,9 @@
 /**
  * Cross-client API contract.
  *
- * The web client currently authenticates with the signed httpOnly cookie. A future
- * mini-program client will use the same resource shapes with its own session token;
- * business rules must stay in the server and never be duplicated in either UI.
+ * Both clients authenticate separately but consume the same local job-catalog
+ * snapshot and resource shapes. Business rules stay in the server and are not
+ * duplicated in either UI.
  */
 export type ApiError = {
   error: string;
@@ -41,12 +41,16 @@ export type MatchJobSummary = {
   company: string;
   city: string;
   workMode?: string | null;
-  applicationType: "verified_email";
-  applicationEmail: string;
+  applicationType: "verified_email" | "official_apply";
+  applicationEmail: string | null;
   applicationUrl: string;
   source: { name: string; url: string; verified: boolean };
   sourceEvidence?: Record<string, unknown> | null;
   sourceVerifiedAt?: string | null;
+  publishedAt?: string | null;
+  expiresAt?: string | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
 };
 
 export type MatchResultSummary = {
@@ -60,7 +64,7 @@ export type MatchResultSummary = {
 export type ApplicationTaskSummary = {
   id: string;
   status: string;
-  applicationType: "verified_email";
+  applicationType: "verified_email" | "official_apply" | "manual_email";
   jobTitle: string;
   company: string;
   applicationUrl?: string | null;
@@ -78,8 +82,20 @@ export type StateResponse = {
   tasks: ApplicationTaskSummary[];
   loginProvider: "email" | "google";
   emailSender: { kind: string; ready: boolean; error: string | null };
-  modelConfigured: boolean;
-  modelProvider: string | null;
+  catalog: {
+    configured: boolean;
+    sourceCount: number;
+    enabledSourceCount: number;
+    activeJobCount: number;
+    freshJobCount: number;
+    lastRefreshAt: string | null;
+    lastSuccessAt: string | null;
+    lastStatus: string | null;
+    lastError: string | null;
+    nextRefreshAt: string | null;
+    refreshIntervalMinutes: number;
+    staleAfterHours: number;
+  };
 };
 
 export const API_ENDPOINTS = {

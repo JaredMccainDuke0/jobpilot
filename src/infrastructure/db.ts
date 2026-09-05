@@ -37,6 +37,15 @@ ensureColumn("match_runs","consumedAt","TEXT");
 ensureColumn("jobs","jobFingerprint","TEXT");
 ensureColumn("jobs","sourceEvidenceJson","TEXT");
 ensureColumn("jobs","sourceVerifiedAt","TEXT");
+ensureColumn("jobs","catalogState","TEXT");
+ensureColumn("jobs","catalogSourceKey","TEXT");
+ensureColumn("jobs","catalogExternalId","TEXT");
+ensureColumn("jobs","publishedAt","TEXT");
+ensureColumn("jobs","expiresAt","TEXT");
+ensureColumn("jobs","firstSeenAt","TEXT");
+ensureColumn("jobs","lastSeenAt","TEXT");
+ensureColumn("jobs","lastCheckedAt","TEXT");
+ensureColumn("jobs","contentHash","TEXT");
 ensureColumn("application_tasks","recipientEmail","TEXT");
 ensureColumn("application_tasks","messageSubject","TEXT");
 ensureColumn("application_tasks","messageBodyHash","TEXT");
@@ -45,11 +54,51 @@ ensureColumn("application_tasks","providerReference","TEXT");
 ensureColumn("application_tasks","submittedAt","TEXT");
 ensureColumn("application_tasks","manualRecipientEmail","TEXT");
 ensureColumn("application_tasks","processingStartedAt","TEXT");
+ensureColumn("match_runs","searchSource","TEXT");
+ensureColumn("match_runs","catalogSnapshotAt","TEXT");
+db.exec(`CREATE TABLE IF NOT EXISTS catalog_sources(
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  official INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  etag TEXT,
+  lastModified TEXT,
+  lastFetchedAt TEXT,
+  lastSuccessAt TEXT,
+  lastError TEXT,
+  lastItemCount INTEGER NOT NULL DEFAULT 0,
+  updatedAt TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS catalog_refresh_runs(
+  id TEXT PRIMARY KEY,
+  startedAt TEXT NOT NULL,
+  finishedAt TEXT,
+  status TEXT NOT NULL,
+  sourceCount INTEGER NOT NULL DEFAULT 0,
+  fetchedCount INTEGER NOT NULL DEFAULT 0,
+  acceptedCount INTEGER NOT NULL DEFAULT 0,
+  rejectedCount INTEGER NOT NULL DEFAULT 0,
+  expiredCount INTEGER NOT NULL DEFAULT 0,
+  errorSummary TEXT
+);
+CREATE TABLE IF NOT EXISTS catalog_locks(
+  name TEXT PRIMARY KEY,
+  owner TEXT NOT NULL,
+  leaseUntil TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
+);`);
+db.exec("UPDATE jobs SET catalogState='legacy' WHERE catalogState IS NULL");
 db.exec(`CREATE INDEX IF NOT EXISTS idx_match_runs_user_created ON match_runs(userId,createdAt DESC);
 CREATE INDEX IF NOT EXISTS idx_match_results_run_score ON match_results(runId,score DESC);
 CREATE INDEX IF NOT EXISTS idx_application_tasks_user_updated ON application_tasks(userId,updatedAt DESC);
 CREATE INDEX IF NOT EXISTS idx_application_tasks_user_key ON application_tasks(userId,idempotencyKey);
-CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs(jobFingerprint);`);
+CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs(jobFingerprint);
+CREATE INDEX IF NOT EXISTS idx_jobs_catalog_freshness ON jobs(catalogState,lastSeenAt DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_catalog_identity ON jobs(catalogSourceKey,catalogExternalId);
+CREATE INDEX IF NOT EXISTS idx_catalog_sources_enabled ON catalog_sources(enabled,lastSuccessAt DESC);
+CREATE INDEX IF NOT EXISTS idx_catalog_refresh_runs_started ON catalog_refresh_runs(startedAt DESC);`);
 const legacyOwnerSetting=db.prepare("SELECT value FROM settings WHERE key='smtpUser'").get() as {value?:string}|undefined;
 const legacyOwnerEmail=process.env.JOBPILOT_OWNER_EMAIL||legacyOwnerSetting?.value;
 const inviteHash=process.env.JOBPILOT_INVITE_PASSWORD_HASH;

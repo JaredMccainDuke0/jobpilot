@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   now: vi.fn(),
   run: vi.fn(),
   transaction: vi.fn(),
-  searchJobs: vi.fn(),
+  searchCatalogJobs: vi.fn(),
   matchJob: vi.fn(),
 }));
 
@@ -21,7 +21,7 @@ vi.mock("@/infrastructure/db", () => ({
   run: mocks.run,
   transaction: mocks.transaction,
 }));
-vi.mock("@/infrastructure/job-search", () => ({ searchJobs: mocks.searchJobs }));
+vi.mock("@/infrastructure/job-catalog", () => ({ searchCatalogJobs: mocks.searchCatalogJobs }));
 vi.mock("@/domain/matching", () => ({ matchJob: mocks.matchJob }));
 
 import { POST } from "./route";
@@ -50,9 +50,24 @@ beforeEach(() => {
     unknown: [],
     risks: [],
   });
-  mocks.searchJobs.mockResolvedValue({
-    mode: "live",
+  mocks.searchCatalogJobs.mockReturnValue({
+    mode: "catalog",
     warning: undefined,
+    fetchedAt: "2026-08-17T00:00:00.000Z",
+    catalog: {
+      configured: true,
+      sourceCount: 1,
+      enabledSourceCount: 1,
+      activeJobCount: 1,
+      freshJobCount: 1,
+      lastRefreshAt: "2026-08-17T00:00:00.000Z",
+      lastSuccessAt: "2026-08-17T00:00:00.000Z",
+      lastStatus: "success",
+      lastError: null,
+      nextRefreshAt: "2026-08-17T01:00:00.000Z",
+      refreshIntervalMinutes: 60,
+      staleAfterHours: 48,
+    },
     jobs: [
       {
         id: "job-1",
@@ -82,7 +97,8 @@ beforeEach(() => {
         source: {
           name: "官方招聘页",
           url: "https://careers.example.test/jobs/1",
-          sourceType: "model_web_search",
+          id: "catalog-source-1",
+          sourceType: "catalog_feed",
           verified: false,
         },
       },
@@ -97,35 +113,19 @@ describe("match persistence", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ ok: true, count: 1, runId: "run-1" });
-    expect(mocks.searchJobs).toHaveBeenCalledWith(
+    expect(mocks.searchCatalogJobs).toHaveBeenCalledWith(
       expect.objectContaining({ excludeFingerprints: [] }),
     );
     expect(mocks.run).toHaveBeenCalledWith(
-      "INSERT OR REPLACE INTO sources(id,name,url,sourceType,verified) VALUES(?,?,?,?,?)",
-      "source-job-1",
-      "官方招聘页",
-      "https://careers.example.test/jobs/1",
-      "model_web_search",
-      0,
-    );
-    expect(mocks.run).toHaveBeenCalledWith(
-      expect.stringContaining("jobFingerprint,sourceEvidenceJson,sourceVerifiedAt"),
-      "job-1",
-      "AI Engineer",
-      "Test Company",
-      "深圳",
+      expect.stringContaining("searchWarning,searchSource,catalogSnapshotAt"),
+      "run-1",
+      "version-1",
+      "preference-1",
+      "2026-08-17T00:00:00.000Z",
+      "user-1",
       null,
-      null,
-      null,
-      null,
-      "负责人工智能应用开发、模型集成和工程化交付。",
-      "verified_email",
-      "https://careers.example.test/jobs/1",
-      "source-job-1",
-      "recruiting@example.test",
-      "test-company|ai engineer|深圳|recruiting@example.test",
-      expect.stringContaining("\"status\":\"unverified\""),
-      null,
+      "catalog",
+      "2026-08-17T00:00:00.000Z",
     );
   });
 });

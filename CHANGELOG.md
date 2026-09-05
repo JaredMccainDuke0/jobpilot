@@ -10,6 +10,11 @@ before a tagged release exists.
 - Added CI validation for TypeScript, tests, production builds, and mini-program
   source files.
 - Added explicit repository metadata and a Node.js runtime requirement.
+- Replaced click-triggered model web search with a scheduled, bounded job
+  catalog fed by configured public ATS, JSON, RSS, or Atom sources.
+- Added deterministic freshness, expiry, deduplication, retention, and catalog
+  status reporting for user and mini-program matching.
+- Removed fabricated seed vacancies and the unused model-search runtime path.
 
 ## [0.1.0] - 2026-09-04
 

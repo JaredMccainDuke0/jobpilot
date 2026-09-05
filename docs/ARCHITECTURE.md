@@ -1,13 +1,70 @@
 # Architecture
 
-The Next.js UI calls application API routes. API routes validate the signed user session, scope every query to that user, and coordinate domain rules, SQLite transactions, and adapters. Domain modules do not depend on HTTP or storage. Node 22's built-in SQLite driver stores multi-user state without a separate native schema engine. Model and submission adapters return untrusted results and never write business data directly.
+JobPilot is a local-catalog job matching application. A scheduled worker reads
+configured public vacancy feeds, normalizes and validates their records, and
+stores a bounded, freshness-aware snapshot in SQLite. User requests only read
+that snapshot and apply deterministic matching rules.
 
-Resume -> confirmed parse version -> preference -> match run -> match results -> selected results -> application tasks -> append-only status history.
+```text
+Public ATS / JSON / RSS / Atom feeds
+                 |
+       scheduled catalog worker
+                 |
+  fetch bounds + normalization + dedupe
+                 |
+       expiry and retention policy
+                 v
+       SQLite job catalog snapshot
+                 |
+        user-scoped local query
+                 |
+       deterministic match scoring
+                 |
+     explicit selection and confirmation
+                 |
+       submission task and history
+```
 
-Deterministic city, graduation-year, and work-mode checks precede semantic evidence scoring. Job descriptions are delimited untrusted content; instruction-like text is ignored and recorded as risk. External model responses must be schema validated before persistence.
+The Next.js Node process starts the scheduler through `src/instrumentation.ts`.
+Deployments may instead run `npm run catalog:worker` under a process manager,
+or invoke `npm run catalog:refresh` from a scheduler. A database lease prevents
+overlapping refresh jobs across processes.
 
-Task creation and initial history share a transaction. `idempotencyKey` is unique. Mock execution transitions WAITING -> PROCESSING -> SUCCESS. Unsupported verified channels transition directly to NEEDS_USER. Real email remains behind `SubmissionAdapter` and requires explicit configuration and final confirmation.
+## Boundaries
 
-PDF.js and Mammoth extract local resume text before deterministic field structuring. Extraction failures are returned as actionable 422 responses. Model health checks call the configured OpenAI-compatible service. Verified email jobs may use the SMTP adapter only after final confirmation; mock jobs remain side-effect free.
+- Domain modules do not depend on HTTP or storage.
+- Feed adapters return untrusted records; they do not write business data
+  directly.
+- The catalog worker owns source freshness, deduplication, expiry, retention,
+  and active-row limits.
+- API routes validate the signed user session, scope every query to that user,
+  and create immutable match-run snapshots.
+- Matching uses deterministic city, graduation-year, work-mode, and capability
+  checks. It does not call a model or perform network search during a user
+  request.
+- Real email submission remains behind explicit user confirmation, verified
+  channel checks, configured sender credentials, and an idempotent task.
 
-Registration requires the hashed invitation password. Users then authenticate with their own scrypt-hashed password and receive an HMAC-signed HttpOnly session cookie. The server-wide model URL, model name, and API key never enter user state responses. User SMTP passwords are AES-GCM encrypted with authenticated user/key context. A tunnel only supplies HTTPS transport; it does not replace authentication or tenant isolation.
+## Data lifecycle
+
+```text
+feed item -> normalized job -> active catalog row -> match snapshot
+                                     |                    |
+                                     v                    v
+                              stale/expired         selected task
+                                     |                    |
+                                     +--> bounded cleanup  +--> append-only history
+```
+
+Jobs referenced by match or application history are retained as evidence. Other
+expired catalog rows are eligible for cleanup after the configured retention
+period. See [`JOB_CATALOG.md`](JOB_CATALOG.md) for source configuration and
+freshness policy.
+
+## Cross-client behavior
+
+The web UI and WeChat mini-program consume the same state and resource APIs.
+The web UI uses a signed HttpOnly Cookie; the mini-program uses a separate
+Bearer session. A mini-program token is never written into a browser Cookie.
+Neither client implements the catalog or submission rules as its only source of
+authority.

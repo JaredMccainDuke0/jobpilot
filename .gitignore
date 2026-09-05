@@ -16,3 +16,4 @@ test-results/
 output/
 *.tsbuildinfo
 prisma/data/
+config/job-feeds.json

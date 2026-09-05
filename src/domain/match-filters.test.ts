@@ -12,7 +12,7 @@ const results = Array.from({ length: 23 }, (_, index) => ({
     industry: index === 0 ? "人工智能" : "通信",
     description: index === 0 ? "Python 大模型应用" : "通信系统开发",
     applicationType: index === 0 ? "verified_email" : "official_apply",
-    source: { verified: index === 0, sourceType: "model_web_search" },
+    source: { verified: index === 0, sourceType: "catalog_feed" },
   },
 }));
 

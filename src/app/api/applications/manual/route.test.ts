@@ -19,7 +19,7 @@ vi.mock("@/infrastructure/db", () => ({
   id: mocks.id,
   now: mocks.now,
 }));
-vi.mock("@/infrastructure/job-search", () => ({
+vi.mock("@/domain/job-identity", () => ({
   buildJobFingerprint: mocks.buildJobFingerprint,
 }));
 vi.mock("@/application/process-application-task", () => ({

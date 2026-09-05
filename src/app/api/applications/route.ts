@@ -2,6 +2,7 @@ import { submissionEligibility } from "@/domain/application";
 import { MATCH_SELECTION_LIMIT } from "@/domain/match-visibility";
 import { requireUser } from "@/infrastructure/auth";
 import { all, id, now, one, run, transaction } from "@/infrastructure/db";
+import { catalogSettings, freshnessCutoff } from "@/domain/job-catalog";
 
 function addHistory(taskId: string, status: string, reason: string) {
   run("INSERT INTO application_history VALUES(?,?,?,?,?)", id(), taskId, status, reason, now());
@@ -9,6 +10,8 @@ function addHistory(taskId: string, status: string, reason: string) {
 
 export async function POST() {
   const user = await requireUser();
+  const catalogCutoff = freshnessCutoff(new Date(), catalogSettings().staleAfterHours);
+  const catalogNow = new Date().toISOString();
   const latest = one<any>(
     "SELECT id,consumedAt FROM match_runs WHERE userId=? ORDER BY createdAt DESC LIMIT 1",
     user.id,
@@ -29,12 +32,18 @@ export async function POST() {
      JOIN sources s ON s.id=j.sourceId
      WHERE r.runId=?
        AND r.selected=1
-       AND s.sourceType='model_web_search'
+       AND s.sourceType='catalog_feed'
+       AND j.catalogState='active'
+       AND EXISTS (SELECT 1 FROM catalog_sources cs WHERE cs.id=j.catalogSourceKey AND cs.enabled=1)
+       AND j.lastSeenAt>=?
+       AND (j.expiresAt IS NULL OR j.expiresAt>?)
        AND r.id IN (
          SELECT id FROM match_results WHERE runId=? ORDER BY score DESC LIMIT ?
        )
      ORDER BY r.score DESC`,
     latest.id,
+    catalogCutoff,
+    catalogNow,
     latest.id,
     MATCH_SELECTION_LIMIT,
   );

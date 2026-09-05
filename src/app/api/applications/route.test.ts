@@ -45,6 +45,8 @@ describe("application task creation scope", () => {
     expect(mocks.all).toHaveBeenCalledWith(
       expect.stringContaining("SELECT id FROM match_results WHERE runId=? ORDER BY score DESC LIMIT ?"),
       "run-1",
+      expect.any(String),
+      expect.any(String),
       "run-1",
       30,
     );

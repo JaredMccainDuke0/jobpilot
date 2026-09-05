@@ -35,10 +35,13 @@
     "check:miniapp": "node scripts/check-miniapp.mjs",
     "audit": "npm audit --audit-level=moderate",
     "check": "npm run typecheck && npm run test && npm run check:miniapp && npm run audit",
+    "catalog:refresh": "tsx scripts/refresh-catalog.ts",
+    "catalog:worker": "tsx scripts/catalog-worker.ts",
     "db:push": "tsx prisma/seed.ts --init-only",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.1",
     "lucide-react": "^0.468.0",
     "mammoth": "^1.12.2",
     "next": "^16.3.4",
